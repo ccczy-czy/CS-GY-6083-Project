@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invitations</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+        h1, h2 { color: #00c6ff; }
+        .card {
+            background: white;
+            color: black;
+            max-width: 720px;
+            margin: 20px auto;
+            padding: 24px;
+            border-radius: 10px;
+        }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #00c6ff; color: white; }
+        .card a { color: #00c6ff; font-weight: bold; }
+        button {
+            padding: 6px 12px;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pending invitations</h1>
+    <div class="card">
+        <h2>Workspaces</h2>
+        {% if workspace_invites %}
+        <table>
+            <tr>
+                <th>Workspace</th>
+                <th>Invited</th>
+                <th>Actions</th>
+            </tr>
+            {% for row in workspace_invites %}
+            <tr>
+                <td>{{ row[1] }}</td>
+                <td>{{ row[3] }}</td>
+                <td>
+                    <form style="display:inline" method="POST" action="/invitations/workspace/{{ row[0] }}/accept">
+                        <button type="submit">Accept</button>
+                    </form>
+                    <form style="display:inline" method="POST" action="/invitations/workspace/{{ row[0] }}/decline">
+                        <button type="submit">Decline</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p>None</p>
+        {% endif %}
+    </div>
+    <div class="card">
+        <h2>Channels</h2>
+        {% if channel_invites %}
+        <table>
+            <tr>
+                <th>Channel</th>
+                <th>Type</th>
+                <th>Invited</th>
+                <th>Actions</th>
+            </tr>
+            {% for row in channel_invites %}
+            <tr>
+                <td>{{ row[1] }} (ws id {{ row[2] }})</td>
+                <td>{{ row[4] }}</td>
+                <td>{{ row[3] }}</td>
+                <td>
+                    <form style="display:inline" method="POST" action="/invitations/channel/{{ row[0] }}/accept">
+                        <button type="submit">Accept</button>
+                    </form>
+                    <form style="display:inline" method="POST" action="/invitations/channel/{{ row[0] }}/decline">
+                        <button type="submit">Decline</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p>None</p>
+        {% endif %}
+    </div>
+    <p style="text-align:center"><a href="/home">Home</a></p>
+</body>
+</html>

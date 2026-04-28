@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Create Channel</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial;
+            text-align: center;
+        }
+
+        .card {
+            background: white;
+            color: black;
+            width: 360px;
+            margin: 80px auto;
+            padding: 24px;
+            border-radius: 10px;
+        }
+
+        input,
+        select {
+            width: 90%;
+            padding: 8px;
+            margin: 10px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+
+        a {
+            color: #00c6ff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h2>Create Channel</h2>
+        <form method="POST">
+            <input name="name" placeholder="Channel name" required>
+            <label>
+                Type
+                <select name="type">
+                    <option value="public">public (any workspace member can join)</option>
+                    <option value="private">private (invite only)</option>
+                    <option value="direct">direct (you + one other member)</option>
+                </select>
+            </label>
+            <p style="font-size:12px;">For <b>direct</b>, pick the other person (must already be in this workspace):</p>
+            <select name="peer_uid">
+                <option value="">—</option>
+                {% for u in other_members %}
+                <option value="{{ u[0] }}">{{ u[1] }} ({{ u[2] }})</option>
+                {% endfor %}
+            </select>
+            <br>
+            <button type="submit">Create</button>
+        </form>
+        <br>
+        <a href="/workspace/{{ workspace_id }}">Back to workspace</a>
+    </div>
+</body>
+
+</html>

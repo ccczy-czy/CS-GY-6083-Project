@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Workspace</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial;
+            text-align: center;
+        }
+
+        .card {
+            background: white;
+            color: black;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        a {
+            color: #00c6ff;
+            font-weight: bold;
+        }
+
+        ul {
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>{{ workspace[1] }}</h1>
+        <p>{{ workspace[2] }}</p>
+        <hr>
+        <h2>Channels</h2>
+        <p><a href="/channel/create/{{ workspace[0] }}">+ Create channel</a></p>
+        {% if can_invite %}
+        <p><a href="/workspace/{{ workspace[0] }}/invite">+ Invite user to this workspace</a></p>
+        {% endif %}
+        <ul>
+            {% for c in channels %}
+            <li>
+                {% set cname = c[0] %}
+                {% set wid = c[1] %}
+                {% set ctype = c[2] %}
+                <a href="{{ url_for('home', channel_wid=wid, channel_name=cname) }}">{{ cname }}</a>
+                ({{ ctype }})
+                {% if ctype == 'private' and can_invite %}
+                <a href="{{ url_for('invite_to_channel', channel_wid=wid, channel_name=cname) }}">invite</a>
+                {% endif %}
+                <a href="/channel/delete/{{ cname|urlencode }}/{{ wid }}" style="color:red;"
+                    onclick="return confirm('Delete this channel?');">delete</a>
+            </li>
+            {% endfor %}
+        </ul>
+        <br>
+        <a href="/workspaces">Back to workspaces</a>
+    </div>
+</body>
+
+</html>

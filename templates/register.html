@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            background: url("https://images.unsplash.com/photo-1519389950473-47ba0277781c") no-repeat center center fixed;
+            background-size: cover;
+        }
+
+        .box {
+            width: 300px;
+            margin: 120px auto;
+            background: rgba(0,0,0,0.7);
+            padding: 30px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+
+        input {
+            width: 90%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        a {
+            color: #ccc;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box">
+    <h2>Register</h2>
+
+    {% if error %}
+        <p style="color:red;">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST">
+        <input type="text" name="email" placeholder="Email" required>
+        <input type="text" name="username" placeholder="Username" required>     
+        <input type="text" name="nickname" placeholder="Nickname" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <br>
+        <button type="submit">Register</button>
+    </form>
+
+    <br>
+    <a href="/home">Back to Login</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invite to workspace</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            color: black;
+            max-width: 400px;
+            margin: 80px auto;
+            padding: 28px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .card h1 { color: #00c6ff; margin-top: 0; }
+        .card input[type="email"] { width: 90%; padding: 10px; margin: 10px 0; }
+        .card button {
+            padding: 10px 20px;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+        .err { color: red; }
+        .card a { color: #00c6ff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Invite to workspace</h1>
+        {% if error %}<p class="err">{{ error }}</p>{% endif %}
+        <form method="POST">
+            <input type="email" name="email" placeholder="Registered user email" required>
+            <p><button type="submit">Send invite</button></p>
+        </form>
+        <p><a href="/workspace/{{ wid }}">Back</a></p>
+    </div>
+</body>
+</html>

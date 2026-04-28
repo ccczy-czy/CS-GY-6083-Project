@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Search messages</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+        h1 { color: #00c6ff; }
+        .card {
+            background: white;
+            color: black;
+            max-width: 720px;
+            margin: 20px auto;
+            padding: 24px;
+            border-radius: 10px;
+        }
+        .card a { color: #00c6ff; }
+        .card li { margin: 12px 0; }
+        .card form input { padding: 8px; margin-right: 8px; }
+        .card form button {
+            padding: 8px 16px;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Search</h1>
+    <div class="card">
+        <form method="GET" action="/search">
+            <input type="search" name="q" value="{{ q }}" placeholder="Keyword" size="40">
+            <button type="submit">Search</button>
+        </form>
+        <p><a href="/home">Home</a></p>
+        {% if results %}
+        <h2 style="color:#00c6ff;">Results ({{ results|length }})</h2>
+        <ul>
+            {% for r in results %}
+            <li>
+                <strong>{{ r[4] }}</strong> in <em>#{{ r[2] }}</em> (workspace id {{ r[3] }})<br>
+                <span style="color:#333;">{{ r[0] }}</span><br>
+                <small style="color:#666;">{{ r[1] }}</small>
+            </li>
+            {% endfor %}
+        </ul>
+        {% elif q %}
+        <p style="color:#333;">No matches.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
