@@ -172,19 +172,6 @@ def index():
     return redirect("/home")
 
 
-@app.route("/users")
-def users():
-    if "user_id" not in session:
-        return redirect("/login")
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT uid, nickname FROM \"User\" ORDER BY uid;")
-    data = _dict_rows(("uid", "nickname"), cur.fetchall())
-    cur.close()
-    conn.close()
-    return render_template("users.html", users=data)
-
-
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -216,17 +203,6 @@ def register():
             cur.close()
             conn.close()
     return render_template("register.html")
-
-
-@app.route("/user/delete/<int:user_id>")
-def delete_user(user_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute('DELETE FROM "User" WHERE uid = %s', (user_id,))
-    conn.commit()
-    cur.close()
-    conn.close()
-    return redirect("/users")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1441,41 +1417,6 @@ def delete_channel(name, channel_wid):
     cur.close()
     conn.close()
     return redirect(request.referrer or "/workspaces")
-
-
-@app.route("/channel/<name>/<int:channel_wid>")
-def channel_detail(name, channel_wid):
-    if "user_id" not in session:
-        return redirect("/login")
-    uid = int(session["user_id"])
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT m.mid, m.content, u.nickname
-        FROM "Message" m
-        JOIN "ChannelMember" cm ON m.cmid = cm.cmid
-        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
-        JOIN "User" u ON wm.uid = u.uid
-        WHERE m.channel_wid = %s AND m.channel_name = %s
-          AND NOT m.is_deleted
-          AND NOT EXISTS (
-            SELECT 1 FROM "MessageHidden" mh
-            WHERE mh.mid = m.mid AND mh.uid = %s
-          )
-        ORDER BY m.sent_at
-        """,
-        (channel_wid, name, uid),
-    )
-    messages = _dict_rows(("mid", "content", "nickname"), cur.fetchall())
-    cur.close()
-    conn.close()
-    return render_template(
-        "channel_detail.html",
-        messages=messages,
-        channel_name=name,
-        workspace_id=channel_wid,
-    )
 
 
 @app.route("/send_message", methods=["POST"])
