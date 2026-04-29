@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>snickr — Profile</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #00c6ff;
+            margin-top: 0;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            max-width: 688px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .toolbar a {
+            color: #7ec8ff;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .toolbar a:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            background: white;
+            color: #111;
+            max-width: 688px;
+            margin: 0 auto 20px;
+            padding: 22px 24px;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: #243b55;
+            font-size: 1.15rem;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        select {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        button[type="submit"] {
+            margin-top: 16px;
+            padding: 10px 18px;
+            background: #00c6ff;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button[type="submit"]:hover {
+            background: #00a8d8;
+        }
+
+        .msg-ok {
+            color: #0a7a2e;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .msg-err {
+            color: #c62828;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .danger {
+            border-top: 2px solid #ffcdd2;
+            margin-top: 20px;
+            padding-top: 16px;
+        }
+
+        .danger h2 {
+            color: #b71c1c;
+        }
+
+        .danger button[type="submit"] {
+            background: #c62828;
+        }
+
+        .danger button[type="submit"]:hover {
+            background: #8e0000;
+        }
+
+        .hint {
+            font-size: 0.85rem;
+            color: #555;
+            margin-top: 6px;
+        }
+
+        .transfer-block {
+            margin-bottom: 14px;
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+
+        .transfer-block strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toolbar">
+        <h1>Your profile</h1>
+        <span><a href="/home">Home</a></span>
+    </div>
+
+    <div class="card">
+        <h2>Email, username, nickname</h2>
+        {% if account_success %}
+        <p class="msg-ok">{{ account_success }}</p>
+        {% endif %}
+        {% if account_error %}
+        <p class="msg-err">{{ account_error }}</p>
+        {% endif %}
+        <form method="POST" action="/profile/account">
+            <label for="email">Email</label>
+            <input id="email" type="text" name="email" value="{{ email }}" required autocomplete="email">
+
+            <label for="username">Username</label>
+            <input id="username" type="text" name="username" value="{{ username }}" required autocomplete="username">
+
+            <label for="nickname">Nickname</label>
+            <input id="nickname" type="text" name="nickname" value="{{ nickname }}" autocomplete="nickname">
+            <p class="hint">Optional. Leave blank to clear your nickname.</p>
+
+            <button type="submit">Save changes</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Change password</h2>
+        {% if password_success %}
+        <p class="msg-ok">{{ password_success }}</p>
+        {% endif %}
+        {% if password_error %}
+        <p class="msg-err">{{ password_error }}</p>
+        {% endif %}
+        <form method="POST" action="/profile/password">
+            <label for="current_password">Current password</label>
+            <input id="current_password" type="password" name="current_password" required
+                autocomplete="current-password">
+
+            <label for="new_password">New password</label>
+            <input id="new_password" type="password" name="new_password" required autocomplete="new-password">
+
+            <label for="confirm_password">Confirm new password</label>
+            <input id="confirm_password" type="password" name="confirm_password" required autocomplete="new-password">
+
+            <button type="submit">Update password</button>
+        </form>
+    </div>
+
+    <div class="card danger">
+        <h2>Delete account</h2>
+        {% if delete_error %}
+        <p class="msg-err">{{ delete_error }}</p>
+        {% endif %}
+        <p>This cannot be undone. If you created workspaces, you must transfer each one to another active member
+            below.</p>
+        <form method="POST" action="/profile/delete">
+            {% for wid, wname, members in owned_workspaces %}
+            <div class="transfer-block">
+                <strong>Transfer ownership: {{ wname }}</strong>
+                {% if members %}
+                <label for="transfer_{{ wid }}">New owner (workspace member)</label>
+                <select id="transfer_{{ wid }}" name="transfer_{{ wid }}" required>
+                    <option value="" disabled selected>Select a member…</option>
+                    {% for m_uid, m_label in members %}
+                    <option value="{{ m_uid }}">{{ m_label }} (uid {{ m_uid }})</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <p class="msg-err">No other active members — invite someone before you can delete your account.</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <label for="del_password">Confirm with your password</label>
+            <input id="del_password" type="password" name="password" required autocomplete="current-password">
+
+            <button type="submit"
+                onclick="return confirm('Permanently delete your account? This cannot be undone.');">Delete my
+                account</button>
+        </form>
+    </div>
+</body>
+
+</html>

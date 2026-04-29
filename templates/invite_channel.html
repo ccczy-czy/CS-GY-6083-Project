@@ -59,7 +59,7 @@
             <label>Member
                 <select name="target_uid" required>
                     {% for u in candidates %}
-                    <option value="{{ u[0] }}">{{ u[1] }} ({{ u[2] }})</option>
+                    <option value="{{ u.uid }}">{{ u.nickname }} ({{ u.email }})</option>
                     {% endfor %}
                 </select>
             </label>

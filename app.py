@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 
@@ -82,6 +83,64 @@ def user_sent_message(cursor, mid: int, uid: int) -> bool:
     return cursor.fetchone() is not None
 
 
+def _email_format_ok(value: str) -> bool:
+    if not value or "@" not in value:
+        return False
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value.strip()))
+
+
+def _dict_rows(keys: tuple[str, ...], rows: list) -> list[dict[str, object]]:
+    """Map each DB row to a dict so templates do not depend on column order."""
+    return [{k: v for k, v in zip(keys, row)} for row in rows]
+
+
+def _owned_workspaces_with_members(cursor, uid: int) -> list[tuple[int, str, list[tuple[int, str]]]]:
+    """Workspaces where uid is creator; each row is (wid, name, [(member_uid, label), ...])."""
+    cursor.execute(
+        """
+        SELECT w.wid, w.name
+        FROM "Workspace" w
+        WHERE w.created_by = %s
+        ORDER BY w.name
+        """,
+        (uid,),
+    )
+    owned = cursor.fetchall()
+    result: list[tuple[int, str, list[tuple[int, str]]]] = []
+    for wid, wname in owned:
+        cursor.execute(
+            """
+            SELECT wm.uid, u.username, u.nickname
+            FROM "WorkspaceMember" wm
+            JOIN "User" u ON u.uid = wm.uid
+            WHERE wm.wid = %s AND wm.joined_at IS NOT NULL AND wm.uid <> %s
+            ORDER BY u.username
+            """,
+            (wid, uid),
+        )
+        members = []
+        for m_uid, m_user, m_nick in cursor.fetchall():
+            label = (m_nick or m_user).strip() or m_user
+            members.append((m_uid, label))
+        result.append((wid, wname, members))
+    return result
+
+
+def _reassign_channel_creators_to_workspace_owner(cursor, uid: int) -> None:
+    """Resolve Channel.created_by FK before deleting user (channels in WS owned by others)."""
+    cursor.execute(
+        """
+        UPDATE "Channel" c
+        SET created_by = w.created_by
+        FROM "Workspace" w
+        WHERE c.wid = w.wid
+          AND c.created_by = %s
+          AND w.created_by <> %s
+        """,
+        (uid, uid),
+    )
+
+
 def can_manage_channel_invites(cursor, uid: int, channel_wid: int, channel_name: str) -> bool:
     """Channel creator or workspace admin may invite to a private channel."""
     if is_workspace_admin(cursor, uid, channel_wid):
@@ -111,7 +170,7 @@ def users():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT uid, nickname FROM \"User\" ORDER BY uid;")
-    data = cur.fetchall()
+    data = _dict_rows(("uid", "nickname"), cur.fetchall())
     cur.close()
     conn.close()
     return render_template("users.html", users=data)
@@ -193,6 +252,348 @@ def logout():
     return redirect("/login")
 
 
+@app.route("/profile", methods=["GET"])
+def profile():
+    uid = _require_user_id()
+    if uid is None:
+        return redirect("/login")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT email, username, nickname
+        FROM "User"
+        WHERE uid = %s
+        """,
+        (uid,),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        session.clear()
+        return redirect("/login")
+    email, username, nickname = row
+    owned = _owned_workspaces_with_members(cur, uid)
+    cur.close()
+    conn.close()
+    return render_template(
+        "profile.html",
+        email=email or "",
+        username=username or "",
+        nickname=nickname or "",
+        owned_workspaces=owned,
+        account_error=None,
+        account_success=None,
+        password_error=None,
+        password_success=None,
+        delete_error=None,
+    )
+
+
+@app.route("/profile/account", methods=["POST"])
+def profile_update_account():
+    uid = _require_user_id()
+    if uid is None:
+        return redirect("/login")
+    email_raw = (request.form.get("email") or "").strip()
+    username_raw = (request.form.get("username") or "").strip()
+    nickname_raw = (request.form.get("nickname") or "").strip()
+
+    if not email_raw:
+        return _profile_render_with_errors(
+            uid, account_error="Email is required."
+        )
+    if not _email_format_ok(email_raw):
+        return _profile_render_with_errors(
+            uid, account_error="Enter a valid email address."
+        )
+    if not username_raw:
+        return _profile_render_with_errors(
+            uid, account_error="Username is required."
+        )
+
+    nickname_db = nickname_raw if nickname_raw else None
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE "User"
+            SET email = %s, username = %s, nickname = %s
+            WHERE uid = %s
+            """,
+            (email_raw, username_raw, nickname_db, uid),
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return _profile_render_with_errors(uid, account_error="Update failed.")
+        conn.commit()
+    except errors.UniqueViolation:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return _profile_render_with_errors(
+            uid,
+            account_error="That email or username is already taken by another account.",
+        )
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return _profile_render_with_errors(uid, account_error=str(e))
+    cur.close()
+    conn.close()
+
+    session["nickname"] = nickname_db or username_raw
+    return _profile_render_with_errors(
+        uid,
+        account_success="Profile updated.",
+        email=email_raw,
+        username=username_raw,
+        nickname=nickname_raw,
+    )
+
+
+@app.route("/profile/password", methods=["POST"])
+def profile_update_password():
+    uid = _require_user_id()
+    if uid is None:
+        return redirect("/login")
+    current_pw = request.form.get("current_password") or ""
+    new_pw = request.form.get("new_password") or ""
+    confirm_pw = request.form.get("confirm_password") or ""
+
+    if not current_pw:
+        return _profile_render_with_errors(
+            uid, password_error="Current password is required."
+        )
+    if not new_pw:
+        return _profile_render_with_errors(
+            uid, password_error="New password is required."
+        )
+    if new_pw != confirm_pw:
+        return _profile_render_with_errors(
+            uid, password_error="New password and confirmation do not match."
+        )
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1 FROM "User"
+        WHERE uid = %s AND password = %s
+        """,
+        (uid, current_pw),
+    )
+    if cur.fetchone() is None:
+        cur.close()
+        conn.close()
+        return _profile_render_with_errors(
+            uid, password_error="Current password is incorrect."
+        )
+    try:
+        cur.execute(
+            'UPDATE "User" SET password = %s WHERE uid = %s',
+            (new_pw, uid),
+        )
+        conn.commit()
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return _profile_render_with_errors(uid, password_error=str(e))
+    cur.close()
+    conn.close()
+    return _profile_render_with_errors(uid, password_success="Password changed.")
+
+
+@app.route("/profile/delete", methods=["POST"])
+def profile_delete_account():
+    uid = _require_user_id()
+    if uid is None:
+        return redirect("/login")
+    password = request.form.get("password") or ""
+    if not password:
+        return _profile_render_with_errors(
+            uid, delete_error="Enter your password to confirm account deletion."
+        )
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1 FROM "User"
+        WHERE uid = %s AND password = %s
+        """,
+        (uid, password),
+    )
+    if cur.fetchone() is None:
+        cur.close()
+        conn.close()
+        return _profile_render_with_errors(
+            uid, delete_error="Password is incorrect."
+        )
+
+    owned = _owned_workspaces_with_members(cur, uid)
+    transfer_map: dict[int, int] = {}
+    for wid, wname, members in owned:
+        if not members:
+            cur.close()
+            conn.close()
+            return _profile_render_with_errors(
+                uid,
+                delete_error=(
+                    f'Workspace "{wname}" has no other active members. '
+                    "Invite someone who can take ownership before deleting your account."
+                ),
+            )
+        raw = request.form.get(f"transfer_{wid}") or ""
+        if not raw.strip():
+            cur.close()
+            conn.close()
+            return _profile_render_with_errors(
+                uid,
+                delete_error=(
+                    f'Choose a member to receive ownership of workspace "{wname}".'
+                ),
+            )
+        try:
+            target_uid = int(raw)
+        except ValueError:
+            cur.close()
+            conn.close()
+            return _profile_render_with_errors(
+                uid,
+                delete_error=f"Invalid transferee selection for workspace \"{wname}\".",
+            )
+        allowed = {m[0] for m in members}
+        if target_uid not in allowed:
+            cur.close()
+            conn.close()
+            return _profile_render_with_errors(
+                uid,
+                delete_error=(
+                    f'Selected user is not an eligible member of workspace "{wname}".'
+                ),
+            )
+        transfer_map[wid] = target_uid
+
+    try:
+        for wid, new_owner in transfer_map.items():
+            cur.execute(
+                """
+                UPDATE "Workspace"
+                SET created_by = %s
+                WHERE wid = %s AND created_by = %s
+                """,
+                (new_owner, wid, uid),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"transfer workspace {wid}")
+            cur.execute(
+                """
+                UPDATE "Channel"
+                SET created_by = %s
+                WHERE wid = %s AND created_by = %s
+                """,
+                (new_owner, wid, uid),
+            )
+            cur.execute(
+                """
+                UPDATE "WorkspaceMember"
+                SET role = 'admin'
+                WHERE wid = %s AND uid = %s AND joined_at IS NOT NULL
+                """,
+                (wid, new_owner),
+            )
+
+        cur.execute(
+            'SELECT 1 FROM "Workspace" WHERE created_by = %s LIMIT 1',
+            (uid,),
+        )
+        if cur.fetchone() is not None:
+            raise RuntimeError("still own workspaces")
+
+        _reassign_channel_creators_to_workspace_owner(cur, uid)
+
+        cur.execute(
+            """
+            SELECT 1 FROM "Channel" c
+            JOIN "Workspace" w ON w.wid = c.wid
+            WHERE c.created_by = %s AND w.created_by = %s
+            LIMIT 1
+            """,
+            (uid, uid),
+        )
+        if cur.fetchone() is not None:
+            raise RuntimeError("channel FK cleanup incomplete")
+
+        cur.execute('DELETE FROM "User" WHERE uid = %s', (uid,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return _profile_render_with_errors(
+            uid,
+            delete_error="Could not delete account. Try again or contact support.",
+        )
+    cur.close()
+    conn.close()
+    session.clear()
+    return redirect("/login")
+
+
+def _profile_render_with_errors(
+    uid: int,
+    *,
+    account_error: str | None = None,
+    account_success: str | None = None,
+    password_error: str | None = None,
+    password_success: str | None = None,
+    delete_error: str | None = None,
+    email: str | None = None,
+    username: str | None = None,
+    nickname: str | None = None,
+):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT email, username, nickname
+        FROM "User"
+        WHERE uid = %s
+        """,
+        (uid,),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        session.clear()
+        return redirect("/login")
+    db_email, db_username, db_nickname = row
+    owned = _owned_workspaces_with_members(cur, uid)
+    cur.close()
+    conn.close()
+    return render_template(
+        "profile.html",
+        email=email if email is not None else (db_email or ""),
+        username=username if username is not None else (db_username or ""),
+        nickname=nickname if nickname is not None else (db_nickname or ""),
+        owned_workspaces=owned,
+        account_error=account_error,
+        account_success=account_success,
+        password_error=password_error,
+        password_success=password_success,
+        delete_error=delete_error,
+    )
+
+
 def _load_sidebar_channels(cur, uid: int):
     """Channels the user may see in the sidebar: public in joined WSp, private/direct per rules."""
     cur.execute(
@@ -232,7 +633,10 @@ def _load_sidebar_channels(cur, uid: int):
         """,
         (uid, uid, uid, uid),
     )
-    return cur.fetchall()
+    return _dict_rows(
+        ("wid", "name", "channel_type", "workspace_name", "is_joined"),
+        cur.fetchall(),
+    )
 
 
 @app.route("/home")
@@ -253,7 +657,7 @@ def home():
         """,
         (uid,),
     )
-    workspaces_list = cur.fetchall()
+    workspaces_list = _dict_rows(("wid", "name", "description"), cur.fetchall())
     cur.execute(
         """
         SELECT wm.wmid, w.name, w.wid, wm.invited_at
@@ -264,11 +668,13 @@ def home():
         """,
         (uid,),
     )
-    workspace_invites = cur.fetchall()
+    workspace_invites = _dict_rows(
+        ("wmid", "workspace_name", "wid", "invited_at"), cur.fetchall()
+    )
     cur.close()
     conn.close()
     return render_template(
-        "home_dashboard.html",
+        "home.html",
         workspaces=workspaces_list,
         workspace_invites=workspace_invites,
     )
@@ -345,7 +751,9 @@ def chat():
             """,
             (channel_wid, channel_name),
         )
-        messages = cur.fetchall()
+        messages = _dict_rows(
+            ("mid", "content", "nickname", "sent_at", "can_recall"), cur.fetchall()
+        )
 
     cur.close()
     conn.close()
@@ -378,7 +786,7 @@ def workspaces():
         """,
         (uid,),
     )
-    data = cur.fetchall()
+    data = _dict_rows(("wid", "name", "description"), cur.fetchall())
     cur.close()
     conn.close()
     return render_template("workspaces.html", workspaces=data)
@@ -421,7 +829,7 @@ def create_workspace():
         finally:
             cur.close()
             conn.close()
-        return redirect("/workspaces")
+        return redirect("/home")
     return render_template("create_workspace.html")
 
 
@@ -436,12 +844,32 @@ def workspace_detail(workspace_id):
         cur.close()
         conn.close()
         return "You are not a member of this workspace.", 403
-    cur.execute('SELECT * FROM "Workspace" WHERE wid = %s', (workspace_id,))
-    workspace = cur.fetchone()
     cur.execute(
-        'SELECT * FROM "Channel" WHERE wid = %s ORDER BY name', (workspace_id,)
+        """
+        SELECT wid, name, description
+        FROM "Workspace"
+        WHERE wid = %s
+        """,
+        (workspace_id,),
     )
-    chlist = cur.fetchall()
+    row = cur.fetchone()
+    if row is None:
+        cur.close()
+        conn.close()
+        return "Workspace not found.", 404
+    workspace = {"wid": row[0], "name": row[1], "description": row[2]}
+    cur.execute(
+        """
+        SELECT name, wid, type
+        FROM "Channel"
+        WHERE wid = %s
+        ORDER BY name
+        """,
+        (workspace_id,),
+    )
+    chlist = [
+        {"name": r[0], "wid": r[1], "type": r[2]} for r in cur.fetchall()
+    ]
     members = None
     if is_workspace_admin(cur, uid, workspace_id):
         cur.execute(
@@ -531,7 +959,7 @@ def invitations():
         """,
         (uid,),
     )
-    w_inv = cur.fetchall()
+    w_inv = _dict_rows(("wmid", "workspace_name", "wid", "invited_at"), cur.fetchall())
     cur.execute(
         """
         SELECT cm.cmid, c.name, c.wid, cm.invited_at, c.type
@@ -544,7 +972,9 @@ def invitations():
         """,
         (uid,),
     )
-    c_inv = cur.fetchall()
+    c_inv = _dict_rows(
+        ("cmid", "channel_name", "wid", "invited_at", "channel_type"), cur.fetchall()
+    )
     cur.close()
     conn.close()
     return render_template("invitations.html", workspace_invites=w_inv, channel_invites=c_inv)
@@ -713,7 +1143,7 @@ def create_channel(workspace_id):
         """,
         (workspace_id, uid),
     )
-    other_members = cur.fetchall()
+    other_members = _dict_rows(("uid", "nickname", "email"), cur.fetchall())
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
         ch_type = request.form.get("type", "public")
@@ -852,7 +1282,7 @@ def invite_to_channel(channel_wid, channel_name):
         """,
         (channel_wid, uid),
     )
-    candidates = cur.fetchall()
+    candidates = _dict_rows(("uid", "nickname", "email"), cur.fetchall())
     cur.close()
     conn.close()
     return render_template(
@@ -903,7 +1333,7 @@ def channel_detail(name, channel_wid):
         """,
         (channel_wid, name),
     )
-    messages = cur.fetchall()
+    messages = _dict_rows(("mid", "content", "nickname"), cur.fetchall())
     cur.close()
     conn.close()
     return render_template(
@@ -1050,7 +1480,10 @@ def search_messages():
         """,
         (uid, pattern),
     )
-    results = cur.fetchall()
+    results = _dict_rows(
+        ("content", "sent_at", "channel_name", "workspace_id", "sender_nickname"),
+        cur.fetchall(),
+    )
     cur.close()
     conn.close()
     return render_template("search.html", q=q, results=results)

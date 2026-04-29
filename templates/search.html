@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Search messages</title>
     <style>
@@ -10,7 +11,11 @@
             margin: 0;
             padding: 24px;
         }
-        h1 { color: #00c6ff; }
+
+        h1 {
+            color: #00c6ff;
+        }
+
         .card {
             background: white;
             color: black;
@@ -19,9 +24,20 @@
             padding: 24px;
             border-radius: 10px;
         }
-        .card a { color: #00c6ff; }
-        .card li { margin: 12px 0; }
-        .card form input { padding: 8px; margin-right: 8px; }
+
+        .card a {
+            color: #00c6ff;
+        }
+
+        .card li {
+            margin: 12px 0;
+        }
+
+        .card form input {
+            padding: 8px;
+            margin-right: 8px;
+        }
+
         .card form button {
             padding: 8px 16px;
             background: #00c6ff;
@@ -32,6 +48,7 @@
         }
     </style>
 </head>
+
 <body>
     <h1>Search</h1>
     <div class="card">
@@ -45,9 +62,10 @@
         <ul>
             {% for r in results %}
             <li>
-                <strong>{{ r[4] }}</strong> in <em>#{{ r[2] }}</em> (workspace id {{ r[3] }})<br>
-                <span style="color:#333;">{{ r[0] }}</span><br>
-                <small style="color:#666;">{{ r[1] }}</small>
+                <strong>{{ r.sender_nickname }}</strong> in <em>#{{ r.channel_name }}</em> (workspace id {{
+                r.workspace_id }})<br>
+                <span style="color:#333;">{{ r.content }}</span><br>
+                <small style="color:#666;">{{ r.sent_at }}</small>
             </li>
             {% endfor %}
         </ul>
@@ -56,4 +74,5 @@
         {% endif %}
     </div>
 </body>
+
 </html>

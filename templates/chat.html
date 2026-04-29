@@ -168,20 +168,20 @@
             </p>
             {% for c in channels %}
             {% if loop.first %}
-            <h4 class="ws-title">{{ c[3] }}</h4>
-            <a class="create-ch-link" href="/channel/create/{{ c[0] }}">+ Create Channel</a>
-            {% elif channels[loop.index0 - 1][3] != c[3] %}
-            <h4 class="ws-title">{{ c[3] }}</h4>
-            <a class="create-ch-link" href="/channel/create/{{ c[0] }}">+ Create Channel</a>
+            <h4 class="ws-title">{{ c.workspace_name }}</h4>
+            <a class="create-ch-link" href="/channel/create/{{ c.wid }}">+ Create Channel</a>
+            {% elif channels[loop.index0 - 1].workspace_name != c.workspace_name %}
+            <h4 class="ws-title">{{ c.workspace_name }}</h4>
+            <a class="create-ch-link" href="/channel/create/{{ c.wid }}">+ Create Channel</a>
             {% endif %}
             <div
-                class="channel{% if channel_wid and channel_name and c[0] == channel_wid and c[1] == channel_name %} active{% endif %}">
-                <span class="channel-type">{{ c[2] }}</span><br>
-                <strong>{{ c[1] }}</strong><br>
-                {% if c[2] == "public" and not c[4] %}
-                <a href="{{ url_for('join_public_channel', channel_wid=c[0], channel_name=c[1]) }}">Join</a>
+                class="channel{% if channel_wid and channel_name and c.wid == channel_wid and c.name == channel_name %} active{% endif %}">
+                <span class="channel-type">{{ c.channel_type }}</span><br>
+                <strong>{{ c.name }}</strong><br>
+                {% if c.channel_type == "public" and not c.is_joined %}
+                <a href="{{ url_for('join_public_channel', channel_wid=c.wid, channel_name=c.name) }}">Join</a>
                 {% else %}
-                <a href="{{ url_for('chat', channel_wid=c[0], channel_name=c[1]) }}">Open</a>
+                <a href="{{ url_for('chat', channel_wid=c.wid, channel_name=c.name) }}">Open</a>
                 {% endif %}
             </div>
             {% else %}
@@ -198,18 +198,18 @@
             </div>
             <div class="messages">
                 {% for m in messages %}
-                <div class="msg-row{% if m[2] == session[" nickname"] %} msg-row--self{% else %} msg-row--other{% endif
-                    %}">
-                    <div class="msg-bubble{% if m[2] == session[" nickname"] %} msg-bubble--self{% else %}
-                        msg-bubble--other{% endif %}">
-                        <b>{{ m[2] }}</b><br>
-                        {{ m[1] }}<br>
-                        <span class="time">{{ m[3].strftime("%Y-%m-%d %H:%M") }}</span>
-                        {% if m[2] == session["nickname"] %}
+                <div
+                    class="msg-row{% if m.nickname == session['nickname'] %} msg-row--self{% else %} msg-row--other{% endif %}">
+                    <div
+                        class="msg-bubble{% if m.nickname == session['nickname'] %} msg-bubble--self{% else %} msg-bubble--other{% endif %}">
+                        <b>{{ m.nickname }}</b><br>
+                        {{ m.content }}<br>
+                        <span class="time">{{ m.sent_at.strftime("%Y-%m-%d %H:%M") }}</span>
+                        {% if m.nickname == session["nickname"] %}
                         <br>
-                        <a href="/delete_message/{{ m[0] }}" style="color:#fcc;">delete</a>
-                        {% if m[4] %}
-                        <a href="/message/recall/{{ m[0] }}" style="color:#ffb84d;">recall</a>
+                        <a href="/delete_message/{{ m.mid }}" style="color:#fcc;">delete</a>
+                        {% if m.can_recall %}
+                        <a href="/message/recall/{{ m.mid }}" style="color:#ffb84d;">recall</a>
                         {% else %}
                         <span style="color:#888;">expired</span>
                         {% endif %}

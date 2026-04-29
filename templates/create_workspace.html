@@ -13,6 +13,8 @@
         }
 
         .container {
+            display: flex;
+            flex-direction: column;
             width: 400px;
             margin: 100px auto;
             padding: 30px;
@@ -26,7 +28,14 @@
             color: #00c6ff;
         }
 
+        form {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
         input {
+            box-sizing: border-box;
             width: 100%;
             padding: 10px;
             margin: 10px 0;
@@ -81,7 +90,7 @@
             <button type="submit">Create</button>
         </form>
 
-        <a href="/workspaces" class="back">⬅ Back</a>
+        <a href="/home" class="back">⬅ Back</a>
     </div>
 
 </body>

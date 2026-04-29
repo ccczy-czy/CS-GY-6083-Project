@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Users</title>
     <style>
@@ -9,6 +10,7 @@
             color: white;
             text-align: center;
         }
+
         .card {
             background: white;
             color: black;
@@ -17,26 +19,38 @@
             padding: 20px;
             border-radius: 10px;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
-        th, td {
+
+        th,
+        td {
             padding: 10px;
             border-bottom: 1px solid #ddd;
         }
+
         th {
             background: #00c6ff;
             color: white;
         }
+
         a {
             text-decoration: none;
             font-weight: bold;
         }
-        .delete { color: red; }
-        .add { color: #00c6ff; }
+
+        .delete {
+            color: red;
+        }
+
+        .add {
+            color: #00c6ff;
+        }
     </style>
 </head>
+
 <body>
     <div class="card">
         <h1>User List</h1>
@@ -48,10 +62,10 @@
             </tr>
             {% for u in users %}
             <tr>
-                <td>{{ u[0] }}</td>
-                <td>{{ u[1] }}</td>
+                <td>{{ u.uid }}</td>
+                <td>{{ u.nickname }}</td>
                 <td>
-                    <a href="/user/delete/{{ u[0] }}" class="delete">Delete</a>
+                    <a href="/user/delete/{{ u.uid }}" class="delete">Delete</a>
                 </td>
             </tr>
             {% endfor %}
@@ -60,4 +74,5 @@
         <a href="/register" class="add">+ Add User</a>
     </div>
 </body>
+
 </html>

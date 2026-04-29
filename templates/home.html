@@ -17,14 +17,16 @@
         h1 {
             color: #00c6ff;
             margin-top: 0;
+            text-align: center;
         }
 
         .toolbar {
             display: flex;
             flex-wrap: wrap;
+            justify-content: space-between;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
+            margin: 0 auto 24px;
+            max-width: 768px;
         }
 
         .btn-create {
@@ -56,10 +58,11 @@
         .card {
             background: white;
             color: black;
-            max-width: 720px;
+            max-width: 768px;
             margin: 0 auto;
             padding: 24px;
             border-radius: 10px;
+            box-sizing: border-box;
         }
 
         /* CSS-only tabs */
@@ -178,13 +181,7 @@
     <div class="toolbar">
         <a class="btn-create" href="/create_workspace">Create new workspace</a>
         <span class="nav-links">
-            <a href="/chat">Chat</a>
-            &middot;
-            <a href="/workspaces">All workspaces</a>
-            &middot;
-            <a href="/invitations">Invitations</a> (channels too)
-            &middot;
-            <a href="/search">Search</a>
+            <a href="/profile">Profile</a>
             &middot;
             <a href="/logout" style="color:#ff8888;">Logout</a>
         </span>
@@ -196,15 +193,15 @@
             <input type="radio" name="home-tab" id="tab-invites">
             <div class="tab-labels">
                 <label for="tab-workspaces">My workspaces</label>
-                <label for="tab-invites">Pending invitations</label>
+                <label for="tab-invites">Pending workspace invitations</label>
             </div>
             <div class="tab-panel tab-panel--workspaces">
                 {% if workspaces %}
                 {% for w in workspaces %}
-                <a class="list-item" href="/workspace/{{ w[0] }}">
-                    <strong>{{ w[1] }}</strong>
-                    {% if w[2] %}
-                    <div class="meta">{{ w[2] }}</div>
+                <a class="list-item" href="/workspace/{{ w.wid }}">
+                    <strong>{{ w.name }}</strong>
+                    {% if w.description %}
+                    <div class="meta">{{ w.description }}</div>
                     {% endif %}
                 </a>
                 {% endfor %}
@@ -222,15 +219,15 @@
                     </tr>
                     {% for row in workspace_invites %}
                     <tr>
-                        <td>{{ row[1] }}</td>
-                        <td>{{ row[3] }}</td>
+                        <td>{{ row.workspace_name }}</td>
+                        <td>{{ row.invited_at }}</td>
                         <td>
                             <form style="display:inline" method="POST"
-                                action="/invitations/workspace/{{ row[0] }}/accept">
+                                action="/invitations/workspace/{{ row.wmid }}/accept">
                                 <button type="submit">Accept</button>
                             </form>
                             <form style="display:inline" method="POST"
-                                action="/invitations/workspace/{{ row[0] }}/decline">
+                                action="/invitations/workspace/{{ row.wmid }}/decline">
                                 <button type="submit">Decline</button>
                             </form>
                         </td>

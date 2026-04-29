@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Invite to workspace</title>
     <style>
@@ -11,6 +12,7 @@
             margin: 0;
             padding: 20px;
         }
+
         .card {
             background: white;
             color: black;
@@ -20,8 +22,18 @@
             border-radius: 10px;
             text-align: center;
         }
-        .card h1 { color: #00c6ff; margin-top: 0; }
-        .card input[type="email"] { width: 90%; padding: 10px; margin: 10px 0; }
+
+        .card h1 {
+            color: #00c6ff;
+            margin-top: 0;
+        }
+
+        .card input[type="email"] {
+            width: 90%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
         .card button {
             padding: 10px 20px;
             background: #00c6ff;
@@ -30,10 +42,18 @@
             cursor: pointer;
             border-radius: 6px;
         }
-        .err { color: red; }
-        .card a { color: #00c6ff; font-weight: bold; }
+
+        .err {
+            color: red;
+        }
+
+        .card a {
+            color: #00c6ff;
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
     <div class="card">
         <h1>Invite to workspace</h1>
@@ -45,4 +65,5 @@
         <p><a href="/workspace/{{ wid }}">Back</a></p>
     </div>
 </body>
+
 </html>

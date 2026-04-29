@@ -58,7 +58,7 @@
             <select name="peer_uid">
                 <option value="">—</option>
                 {% for u in other_members %}
-                <option value="{{ u[0] }}">{{ u[1] }} ({{ u[2] }})</option>
+                <option value="{{ u.uid }}">{{ u.nickname }} ({{ u.email }})</option>
                 {% endfor %}
             </select>
             <br>

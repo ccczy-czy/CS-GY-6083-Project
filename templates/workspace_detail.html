@@ -33,32 +33,29 @@
 
 <body>
     <div class="card">
-        <h1>{{ workspace[1] }}</h1>
-        <p>{{ workspace[2] }}</p>
+        <h1>{{ workspace.name }}</h1>
+        <p>{{ workspace.description }}</p>
         <hr>
         <h2>Channels</h2>
-        <p><a href="/channel/create/{{ workspace[0] }}">+ Create channel</a></p>
+        <p><a href="/channel/create/{{ workspace.wid }}">+ Create channel</a></p>
         {% if can_invite %}
-        <p><a href="/workspace/{{ workspace[0] }}/invite">+ Invite user to this workspace</a></p>
+        <p><a href="/workspace/{{ workspace.wid }}/invite">+ Invite user to this workspace</a></p>
         {% endif %}
         <ul>
             {% for c in channels %}
             <li>
-                {% set cname = c[0] %}
-                {% set wid = c[1] %}
-                {% set ctype = c[2] %}
-                <a href="{{ url_for('chat', channel_wid=wid, channel_name=cname) }}">{{ cname }}</a>
-                ({{ ctype }})
-                {% if ctype == 'private' and can_invite %}
-                <a href="{{ url_for('invite_to_channel', channel_wid=wid, channel_name=cname) }}">invite</a>
+                <a href="{{ url_for('chat', channel_wid=c.wid, channel_name=c.name) }}">{{ c.name }}</a>
+                ({{ c.type }})
+                {% if c.type == 'private' and can_invite %}
+                <a href="{{ url_for('invite_to_channel', channel_wid=c.wid, channel_name=c.name) }}">invite</a>
                 {% endif %}
-                <a href="/channel/delete/{{ cname|urlencode }}/{{ wid }}" style="color:red;"
+                <a href="/channel/delete/{{ c.name|urlencode }}/{{ c.wid }}" style="color:red;"
                     onclick="return confirm('Delete this channel?');">delete</a>
             </li>
             {% endfor %}
         </ul>
         <br>
-        <a href="/workspaces">Back to workspaces</a>
+        <a href="/home">Back to home</a>
     </div>
 </body>
 

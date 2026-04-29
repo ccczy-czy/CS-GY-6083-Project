@@ -47,13 +47,13 @@
 
         {% for w in workspaces %}
         <tr>
-            <td>{{ w[0] }}</td>
+            <td>{{ w.wid }}</td>
             <td>
-                <a href="/workspace/{{ w[0] }} ">
-                    {{ w[1] }}
+                <a href="/workspace/{{ w.wid }}">
+                    {{ w.name }}
                 </a>
             </td>
-            <td>{{ w[2] }}</td>
+            <td>{{ w.description }}</td>
         </tr>
         {% endfor %}
 

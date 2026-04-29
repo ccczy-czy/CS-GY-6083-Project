@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Channel</title>
     <style>
@@ -10,6 +11,7 @@
             margin: 0;
             padding: 20px;
         }
+
         .chat-box {
             max-width: 600px;
             margin: 40px auto;
@@ -18,22 +20,29 @@
             border-radius: 10px;
             padding: 20px;
         }
+
         .msg {
             padding: 10px;
             margin: 8px;
             border-radius: 10px;
             max-width: 60%;
         }
+
         .my-msg {
             background-color: #d4edda;
             margin-left: auto;
             text-align: right;
         }
+
         .other-msg {
             background-color: #f1f1f1;
             margin-right: auto;
         }
-        .name { font-weight: bold; }
+
+        .name {
+            font-weight: bold;
+        }
+
         .input-box {
             display: flex;
             margin-top: 16px;
@@ -41,7 +50,12 @@
             background: #eee;
             border-radius: 8px;
         }
-        .input-box input { flex: 1; padding: 8px; }
+
+        .input-box input {
+            flex: 1;
+            padding: 8px;
+        }
+
         .input-box button {
             padding: 8px 16px;
             background: #4caf50;
@@ -51,29 +65,31 @@
         }
     </style>
 </head>
+
 <body>
     <div class="chat-box">
         <h2 style="color: #00c6ff; margin-top: 0;">#{{ channel_name }}</h2>
         {% for m in messages %}
-        {% if m[2] == session['nickname'] %}
+        {% if m.nickname == session['nickname'] %}
         <div class="msg my-msg">
-        {% else %}
-        <div class="msg other-msg">
-        {% endif %}
-            <div class="name">{{ m[2] }}</div>
-            <div class="content">{{ m[1] }}</div>
-            {% if m[2] == session['nickname'] %}
-            <a href="/delete_message/{{ m[0] }}">Delete</a>
-            <a href="/message/recall/{{ m[0] }}">Recall</a>
-            {% endif %}
+            {% else %}
+            <div class="msg other-msg">
+                {% endif %}
+                <div class="name">{{ m.nickname }}</div>
+                <div class="content">{{ m.content }}</div>
+                {% if m.nickname == session['nickname'] %}
+                <a href="/delete_message/{{ m.mid }}">Delete</a>
+                <a href="/message/recall/{{ m.mid }}">Recall</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <form class="input-box" action="/send_message" method="POST">
+                <input type="hidden" name="channel_wid" value="{{ workspace_id }}">
+                <input type="hidden" name="channel_name" value="{{ channel_name }}">
+                <input type="text" name="content" placeholder="Type message...">
+                <button type="submit">Send</button>
+            </form>
         </div>
-        {% endfor %}
-        <form class="input-box" action="/send_message" method="POST">
-            <input type="hidden" name="channel_wid" value="{{ workspace_id }}">
-            <input type="hidden" name="channel_name" value="{{ channel_name }}">
-            <input type="text" name="content" placeholder="Type message...">
-            <button type="submit">Send</button>
-        </form>
-    </div>
 </body>
+
 </html>
