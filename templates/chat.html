@@ -159,13 +159,12 @@
 <body>
     <div class="container">
         <div class="sidebar">
-            <h3>Channels</h3>
             <p class="sidebar-nav">
                 <a href="/home">Home</a> &middot;
-                <a href="/workspaces">Workspaces</a> &middot;
                 <a href="/invitations">Invitations</a> &middot;
                 <a href="/search">Search</a>
             </p>
+            <h3>Channels</h3>
             {% for c in channels %}
             {% if loop.first %}
             <h4 class="ws-title">{{ c.workspace_name }}</h4>

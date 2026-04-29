@@ -28,6 +28,14 @@
         ul {
             text-align: left;
         }
+
+        .channel-actions {
+            display: inline;
+        }
+
+        .channel-actions a {
+            margin-left: 6px;
+        }
     </style>
 </head>
 
@@ -38,20 +46,41 @@
         <hr>
         <h2>Channels</h2>
         <p><a href="/channel/create/{{ workspace.wid }}">+ Create channel</a></p>
-        {% if can_invite %}
+        {% if can_invite_to_workspace %}
         <p><a href="/workspace/{{ workspace.wid }}/invite">+ Invite user to this workspace</a></p>
         {% endif %}
         <ul>
             {% for c in channels %}
+            {% if c.is_channel_member %}
             <li>
                 <a href="{{ url_for('chat', channel_wid=c.wid, channel_name=c.name) }}">{{ c.name }}</a>
                 ({{ c.type }})
-                {% if c.type == 'private' and can_invite %}
+                {% if c.type == 'private' and c.can_invite_to_channel %}
                 <a href="{{ url_for('invite_to_channel', channel_wid=c.wid, channel_name=c.name) }}">invite</a>
                 {% endif %}
+                {% if can_invite_to_workspace %}
+                <a href="/channel/delete/{{ c.name|urlencode }}/{{ c.wid }}" style="color:red;"
+                    onclick="return confirm('Delete this channel?');">delete</a>
+                {% endif %}
+            </li>
+            {% else %}
+            {% if can_invite_to_workspace %}
+            <li>
+                <span>{{ c.name }}</span>
+                ({{ c.type }})
                 <a href="/channel/delete/{{ c.name|urlencode }}/{{ c.wid }}" style="color:red;"
                     onclick="return confirm('Delete this channel?');">delete</a>
             </li>
+            {% elif c.type == 'public' %}
+            <li>
+                <span>{{ c.name }}</span>
+                ({{ c.type }})
+                <span class="channel-actions">
+                    <a href="{{ url_for('join_public_channel', channel_wid=c.wid, channel_name=c.name) }}">join</a>
+                </span>
+            </li>
+            {% endif %}
+            {% endif %}
             {% endfor %}
         </ul>
         <br>

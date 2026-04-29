@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS "MessageHidden" CASCADE;
 DROP TABLE IF EXISTS "Message" CASCADE;
 DROP TABLE IF EXISTS "ChannelMember" CASCADE;
 DROP TABLE IF EXISTS "Channel" CASCADE;
@@ -69,4 +70,13 @@ CREATE TABLE "Message" (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT fk_msg_channel FOREIGN KEY (channel_name, channel_wid) REFERENCES "Channel"(name, wid) ON DELETE CASCADE,
     CONSTRAINT fk_msg_sender FOREIGN KEY (cmid) REFERENCES "ChannelMember"(cmid) ON DELETE CASCADE
+);
+
+CREATE TABLE "MessageHidden" (
+    mid INTEGER NOT NULL,
+    uid INTEGER NOT NULL,
+    hidden_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (mid, uid),
+    CONSTRAINT fk_mh_message FOREIGN KEY (mid) REFERENCES "Message" (mid) ON DELETE CASCADE,
+    CONSTRAINT fk_mh_user FOREIGN KEY (uid) REFERENCES "User" (uid) ON DELETE CASCADE
 );

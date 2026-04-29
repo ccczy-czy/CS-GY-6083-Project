@@ -747,9 +747,13 @@ def chat():
             JOIN "User" u ON wm.uid = u.uid
             WHERE m.channel_wid = %s AND m.channel_name = %s
               AND NOT m.is_deleted
+              AND NOT EXISTS (
+                SELECT 1 FROM "MessageHidden" mh
+                WHERE mh.mid = m.mid AND mh.uid = %s
+              )
             ORDER BY m.sent_at
             """,
-            (channel_wid, channel_name),
+            (channel_wid, channel_name, uid),
         )
         messages = _dict_rows(
             ("mid", "content", "nickname", "sent_at", "can_recall"), cur.fetchall()
@@ -860,18 +864,25 @@ def workspace_detail(workspace_id):
     workspace = {"wid": row[0], "name": row[1], "description": row[2]}
     cur.execute(
         """
-        SELECT name, wid, type
-        FROM "Channel"
-        WHERE wid = %s
-        ORDER BY name
+        SELECT c.name, c.wid, c.type,
+               (cm.cmid IS NOT NULL) AS is_channel_member
+        FROM "Channel" c
+        JOIN "WorkspaceMember" wm
+          ON wm.wid = c.wid AND wm.uid = %s AND wm.joined_at IS NOT NULL
+        LEFT JOIN "ChannelMember" cm
+          ON cm.wmid = wm.wmid
+          AND cm.channel_name = c.name
+          AND cm.channel_wid = c.wid
+          AND cm.joined_at IS NOT NULL
+        WHERE c.wid = %s
+        ORDER BY c.name
         """,
-        (workspace_id,),
+        (uid, workspace_id),
     )
-    chlist = [
-        {"name": r[0], "wid": r[1], "type": r[2]} for r in cur.fetchall()
-    ]
+    chlist = _dict_rows(("name", "wid", "type", "is_channel_member"), cur.fetchall())
+    is_workspace_admin_user = is_workspace_admin(cur, uid, workspace_id)
     members = None
-    if is_workspace_admin(cur, uid, workspace_id):
+    if is_workspace_admin_user:
         cur.execute(
             """
             SELECT u.uid, u.nickname, u.email
@@ -883,14 +894,17 @@ def workspace_detail(workspace_id):
             (workspace_id,),
         )
         members = cur.fetchall()
-    can_invite = is_workspace_admin(cur, uid, workspace_id)
+    for ch in chlist:
+        ch["can_invite_to_channel"] = can_manage_channel_invites(
+            cur, uid, workspace_id, str(ch["name"])
+        )
     cur.close()
     conn.close()
     return render_template(
         "workspace_detail.html",
         workspace=workspace,
         channels=chlist,
-        can_invite=can_invite,
+        can_invite_to_workspace=is_workspace_admin_user,
         members=members,
     )
 
@@ -993,12 +1007,17 @@ def accept_workspace_invite(wmid):
         SET joined_at = NOW()
         WHERE wmid = %s AND uid = %s
           AND joined_at IS NULL AND invited_at IS NOT NULL
+        RETURNING wid
         """,
         (wmid, uid),
     )
+    accepted_row = cur.fetchone()
     conn.commit()
     cur.close()
     conn.close()
+    if accepted_row:
+        wid = accepted_row[0]
+        return redirect(url_for("workspace_detail", workspace_id=wid))
     return redirect("/invitations")
 
 
@@ -1329,9 +1348,13 @@ def channel_detail(name, channel_wid):
         JOIN "User" u ON wm.uid = u.uid
         WHERE m.channel_wid = %s AND m.channel_name = %s
           AND NOT m.is_deleted
+          AND NOT EXISTS (
+            SELECT 1 FROM "MessageHidden" mh
+            WHERE mh.mid = m.mid AND mh.uid = %s
+          )
         ORDER BY m.sent_at
         """,
-        (channel_wid, name),
+        (channel_wid, name, uid),
     )
     messages = _dict_rows(("mid", "content", "nickname"), cur.fetchall())
     cur.close()
@@ -1438,8 +1461,12 @@ def delete_message(mid):
         return "Not your message", 403
     try:
         cur.execute(
-            'UPDATE "Message" SET is_deleted = TRUE WHERE mid = %s',
-            (mid,),
+            """
+            INSERT INTO "MessageHidden" (mid, uid)
+            VALUES (%s, %s)
+            ON CONFLICT (mid, uid) DO NOTHING
+            """,
+            (mid, uid),
         )
         conn.commit()
     except Exception:  # noqa: BLE001
@@ -1475,10 +1502,14 @@ def search_messages():
         WHERE wm_v.uid = %s
           AND cm_v.joined_at IS NOT NULL
           AND NOT m.is_deleted
+          AND NOT EXISTS (
+            SELECT 1 FROM "MessageHidden" mh
+            WHERE mh.mid = m.mid AND mh.uid = %s
+          )
           AND m.content ILIKE %s
         ORDER BY m.mid, m.sent_at DESC
         """,
-        (uid, pattern),
+        (uid, uid, pattern),
     )
     results = _dict_rows(
         ("content", "sent_at", "channel_name", "workspace_id", "sender_nickname"),
