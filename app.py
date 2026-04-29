@@ -54,6 +54,15 @@ def is_workspace_admin(cursor, uid: int, wid: int) -> bool:
     return cursor.fetchone() is not None
 
 
+def is_workspace_creator(cursor, uid: int, wid: int) -> bool:
+    """True if uid is the user who created the workspace (Workspace.created_by)."""
+    cursor.execute(
+        'SELECT 1 FROM "Workspace" WHERE wid = %s AND created_by = %s',
+        (wid, uid),
+    )
+    return cursor.fetchone() is not None
+
+
 def get_wmid_for_user_in_workspace(cursor, uid: int, wid: int):
     cursor.execute(
         """
@@ -827,7 +836,7 @@ def workspace_detail(workspace_id):
         return "You are not a member of this workspace.", 403
     cur.execute(
         """
-        SELECT wid, name, description
+        SELECT wid, name, description, created_by
         FROM "Workspace"
         WHERE wid = %s
         """,
@@ -838,7 +847,12 @@ def workspace_detail(workspace_id):
         cur.close()
         conn.close()
         return "Workspace not found.", 404
-    workspace = {"wid": row[0], "name": row[1], "description": row[2]}
+    workspace = {
+        "wid": row[0],
+        "name": row[1],
+        "description": row[2],
+        "created_by": row[3],
+    }
     cur.execute(
         """
         SELECT c.name, c.wid, c.type,
@@ -862,15 +876,21 @@ def workspace_detail(workspace_id):
     if is_workspace_admin_user:
         cur.execute(
             """
-            SELECT u.uid, u.nickname, u.email
+            SELECT u.uid, u.nickname, u.email, wm.role,
+                   (w.created_by = u.uid) AS is_workspace_creator
             FROM "WorkspaceMember" wm
             JOIN "User" u ON wm.uid = u.uid
+            JOIN "Workspace" w ON w.wid = wm.wid
             WHERE wm.wid = %s AND wm.joined_at IS NOT NULL
             ORDER BY u.nickname
             """,
             (workspace_id,),
         )
-        members = cur.fetchall()
+        members = _dict_rows(
+            ("uid", "nickname", "email", "role", "is_workspace_creator"),
+            cur.fetchall(),
+        )
+    viewer_is_workspace_creator = is_workspace_creator(cur, uid, workspace_id)
     for ch in chlist:
         ch["can_invite_to_channel"] = can_manage_channel_invites(
             cur, uid, workspace_id, str(ch["name"])
@@ -883,7 +903,121 @@ def workspace_detail(workspace_id):
         channels=chlist,
         can_invite_to_workspace=is_workspace_admin_user,
         members=members,
+        viewer_is_workspace_creator=viewer_is_workspace_creator,
     )
+
+
+@app.route(
+    "/workspace/<int:workspace_id>/members/<int:target_uid>/role",
+    methods=["POST"],
+)
+def workspace_set_member_role(workspace_id, target_uid):
+    """Only the workspace creator may grant or revoke admin role (confirmed via created_by)."""
+    if "user_id" not in session:
+        return redirect("/login")
+    uid = int(session["user_id"])
+    new_role = (request.form.get("role") or "").strip()
+    if new_role not in ("admin", "member"):
+        return "Invalid role.", 400
+    conn = get_db()
+    cur = conn.cursor()
+    if not is_workspace_creator(cur, uid, workspace_id):
+        cur.close()
+        conn.close()
+        return (
+            "Only the workspace creator can change who is an administrator.",
+            403,
+        )
+    cur.execute(
+        'SELECT created_by FROM "Workspace" WHERE wid = %s',
+        (workspace_id,),
+    )
+    ws_row = cur.fetchone()
+    if not ws_row:
+        cur.close()
+        conn.close()
+        return "Workspace not found.", 404
+    creator_uid = ws_row[0]
+    if target_uid == creator_uid:
+        cur.close()
+        conn.close()
+        return (
+            "The workspace creator's administrator status cannot be changed here.",
+            403,
+        )
+    cur.execute(
+        """
+        SELECT 1 FROM "WorkspaceMember"
+        WHERE wid = %s AND uid = %s AND joined_at IS NOT NULL
+        """,
+        (workspace_id, target_uid),
+    )
+    if not cur.fetchone():
+        cur.close()
+        conn.close()
+        return "That user is not an active member of this workspace.", 400
+    cur.execute(
+        """
+        UPDATE "WorkspaceMember"
+        SET role = %s
+        WHERE wid = %s AND uid = %s
+        """,
+        (new_role, workspace_id, target_uid),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for("workspace_detail", workspace_id=workspace_id))
+
+
+@app.route(
+    "/workspace/<int:workspace_id>/members/<int:target_uid>/remove",
+    methods=["POST"],
+)
+def workspace_remove_member(workspace_id, target_uid):
+    """Workspace admins may remove members; the workspace creator cannot be removed."""
+    if "user_id" not in session:
+        return redirect("/login")
+    uid = int(session["user_id"])
+    conn = get_db()
+    cur = conn.cursor()
+    if not is_workspace_admin(cur, uid, workspace_id):
+        cur.close()
+        conn.close()
+        return "Only workspace administrators can remove members.", 403
+    if target_uid == uid:
+        cur.close()
+        conn.close()
+        return "You cannot remove yourself from the workspace here.", 403
+    cur.execute(
+        'SELECT created_by FROM "Workspace" WHERE wid = %s',
+        (workspace_id,),
+    )
+    ws_row = cur.fetchone()
+    if not ws_row:
+        cur.close()
+        conn.close()
+        return "Workspace not found.", 404
+    if target_uid == ws_row[0]:
+        cur.close()
+        conn.close()
+        return "The workspace creator cannot be removed from the workspace.", 403
+    cur.execute(
+        """
+        DELETE FROM "WorkspaceMember"
+        WHERE wid = %s AND uid = %s AND joined_at IS NOT NULL
+        """,
+        (workspace_id, target_uid),
+    )
+    if cur.rowcount == 0:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return "User is not a joined member of this workspace.", 400
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for("workspace_detail", workspace_id=workspace_id))
 
 
 @app.route("/workspace/<int:workspace_id>/invite", methods=["GET", "POST"])

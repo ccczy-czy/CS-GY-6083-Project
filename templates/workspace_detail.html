@@ -14,7 +14,7 @@
         .card {
             background: white;
             color: black;
-            max-width: 500px;
+            max-width: 640px;
             margin: 50px auto;
             padding: 20px;
             border-radius: 10px;
@@ -35,6 +35,35 @@
 
         .channel-actions a {
             margin-left: 6px;
+        }
+
+        .members-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        .members-table th,
+        .members-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            vertical-align: top;
+        }
+
+        .members-table button {
+            padding: 6px 10px;
+            margin: 2px 4px 2px 0;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .members-table button.btn-remove {
+            background: #c0392b;
         }
     </style>
 </head>
@@ -83,6 +112,60 @@
             {% endif %}
             {% endfor %}
         </ul>
+        {% if members %}
+        <hr>
+        <h2>Members</h2>
+        <table class="members-table">
+            <thead>
+                <tr>
+                    <th>Member</th>
+                    <th>Role</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in members %}
+                <tr>
+                    <td>
+                        <strong>{{ m.nickname }}</strong><br>
+                        <small>{{ m.email }}</small>
+                        {% if m.is_workspace_creator %}<br><span style="color:#1e8449;">Workspace creator</span>{% endif
+                        %}
+                    </td>
+                    <td>{{ m.role }}</td>
+                    <td>
+                        {% if viewer_is_workspace_creator and not m.is_workspace_creator %}
+                        {% if m.role == 'member' %}
+                        <form method="POST"
+                            action="{{ url_for('workspace_set_member_role', workspace_id=workspace.wid, target_uid=m.uid) }}"
+                            style="display:inline;">
+                            <input type="hidden" name="role" value="admin">
+                            <button type="submit">Make administrator</button>
+                        </form>
+                        {% else %}
+                        <form method="POST"
+                            action="{{ url_for('workspace_set_member_role', workspace_id=workspace.wid, target_uid=m.uid) }}"
+                            style="display:inline;">
+                            <input type="hidden" name="role" value="member">
+                            <button type="submit">Remove administrator</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                        {% if can_invite_to_workspace and not m.is_workspace_creator and m.uid !=
+                        (session['user_id']|int) %}
+                        <form method="POST"
+                            action="{{ url_for('workspace_remove_member', workspace_id=workspace.wid, target_uid=m.uid) }}"
+                            style="display:inline;"
+                            onsubmit="return confirm('Remove this member from the workspace?');">
+                            <button type="submit" class="btn-remove">Remove from workspace</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
         <br>
         <a href="/home">Back to home</a>
     </div>
