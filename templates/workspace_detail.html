@@ -47,7 +47,7 @@
                 {% set cname = c[0] %}
                 {% set wid = c[1] %}
                 {% set ctype = c[2] %}
-                <a href="{{ url_for('home', channel_wid=wid, channel_name=cname) }}">{{ cname }}</a>
+                <a href="{{ url_for('chat', channel_wid=wid, channel_name=cname) }}">{{ cname }}</a>
                 ({{ ctype }})
                 {% if ctype == 'private' and can_invite %}
                 <a href="{{ url_for('invite_to_channel', channel_wid=wid, channel_name=cname) }}">invite</a>

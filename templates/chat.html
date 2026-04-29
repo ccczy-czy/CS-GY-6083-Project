@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>snickr</title>
+    <title>snickr — Chat</title>
     <style>
         body {
             margin: 0;
@@ -161,6 +161,7 @@
         <div class="sidebar">
             <h3>Channels</h3>
             <p class="sidebar-nav">
+                <a href="/home">Home</a> &middot;
                 <a href="/workspaces">Workspaces</a> &middot;
                 <a href="/invitations">Invitations</a> &middot;
                 <a href="/search">Search</a>
@@ -180,12 +181,12 @@
                 {% if c[2] == "public" and not c[4] %}
                 <a href="{{ url_for('join_public_channel', channel_wid=c[0], channel_name=c[1]) }}">Join</a>
                 {% else %}
-                <a href="{{ url_for('home', channel_wid=c[0], channel_name=c[1]) }}">Open</a>
+                <a href="{{ url_for('chat', channel_wid=c[0], channel_name=c[1]) }}">Open</a>
                 {% endif %}
             </div>
             {% else %}
-            <p class="empty-channels">No channels yet. <a href="/workspaces" style="color:#7ec8ff;">Join a workspace</a>
-                or create one.</p>
+            <p class="empty-channels">No channels yet. <a href="/home" style="color:#7ec8ff;">Open home</a>
+                to join or create a workspace.</p>
             {% endfor %}
             <br>
             <a href="/logout" style="color:#f88;">Logout</a>
@@ -197,9 +198,10 @@
             </div>
             <div class="messages">
                 {% for m in messages %}
-                <div class="msg-row {{ " msg-row--self" if m[2]==session["nickname"] else "msg-row--other" }}">
-                    <div class="msg-bubble {{ " msg-bubble--self" if m[2]==session["nickname"] else "msg-bubble--other"
-                        }}">
+                <div class="msg-row{% if m[2] == session[" nickname"] %} msg-row--self{% else %} msg-row--other{% endif
+                    %}">
+                    <div class="msg-bubble{% if m[2] == session[" nickname"] %} msg-bubble--self{% else %}
+                        msg-bubble--other{% endif %}">
                         <b>{{ m[2] }}</b><br>
                         {{ m[1] }}<br>
                         <span class="time">{{ m[3].strftime("%Y-%m-%d %H:%M") }}</span>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>snickr — Home</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #141e30, #243b55);
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #00c6ff;
+            margin-top: 0;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .btn-create {
+            display: inline-block;
+            padding: 10px 18px;
+            background: #00c6ff;
+            color: white;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-create:hover {
+            background: #00a8d8;
+        }
+
+        .nav-links a {
+            color: #7ec8ff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            background: white;
+            color: black;
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 24px;
+            border-radius: 10px;
+        }
+
+        /* CSS-only tabs */
+        .tabs-wrap input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .tab-labels {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tab-labels label {
+            flex: 1;
+            text-align: center;
+            padding: 12px 16px;
+            cursor: pointer;
+            background: #e8e8e8;
+            color: #333;
+            font-weight: bold;
+            border-radius: 8px 8px 0 0;
+            margin-right: 4px;
+        }
+
+        .tab-labels label:last-child {
+            margin-right: 0;
+        }
+
+        #tab-workspaces:checked~.tab-labels label[for="tab-workspaces"],
+        #tab-invites:checked~.tab-labels label[for="tab-invites"] {
+            background: #00c6ff;
+            color: white;
+        }
+
+        .tab-panel {
+            display: none;
+            padding-top: 20px;
+        }
+
+        #tab-workspaces:checked~.tab-panel--workspaces {
+            display: block;
+        }
+
+        #tab-invites:checked~.tab-panel--invites {
+            display: block;
+        }
+
+        .list-item {
+            display: block;
+            padding: 14px 16px;
+            margin: 8px 0;
+            background: #f5f9fc;
+            border-radius: 8px;
+            border: 1px solid #dde8f0;
+            text-decoration: none;
+            color: #0a1628;
+        }
+
+        .list-item:hover {
+            border-color: #00c6ff;
+            background: #eef8ff;
+        }
+
+        .list-item strong {
+            color: #00c6ff;
+            font-size: 1.05em;
+        }
+
+        .list-item .meta {
+            font-size: 13px;
+            color: #555;
+            margin-top: 6px;
+        }
+
+        .empty-hint {
+            color: #555;
+            margin: 12px 0;
+        }
+
+        table.invite-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table.invite-table th,
+        table.invite-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        table.invite-table th {
+            background: #00c6ff;
+            color: white;
+        }
+
+        .invite-table button {
+            padding: 6px 12px;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Welcome back, {{ session["nickname"] }}</h1>
+
+    <div class="toolbar">
+        <a class="btn-create" href="/create_workspace">Create new workspace</a>
+        <span class="nav-links">
+            <a href="/chat">Chat</a>
+            &middot;
+            <a href="/workspaces">All workspaces</a>
+            &middot;
+            <a href="/invitations">Invitations</a> (channels too)
+            &middot;
+            <a href="/search">Search</a>
+            &middot;
+            <a href="/logout" style="color:#ff8888;">Logout</a>
+        </span>
+    </div>
+
+    <div class="card">
+        <div class="tabs-wrap">
+            <input type="radio" name="home-tab" id="tab-workspaces" checked>
+            <input type="radio" name="home-tab" id="tab-invites">
+            <div class="tab-labels">
+                <label for="tab-workspaces">My workspaces</label>
+                <label for="tab-invites">Pending invitations</label>
+            </div>
+            <div class="tab-panel tab-panel--workspaces">
+                {% if workspaces %}
+                {% for w in workspaces %}
+                <a class="list-item" href="/workspace/{{ w[0] }}">
+                    <strong>{{ w[1] }}</strong>
+                    {% if w[2] %}
+                    <div class="meta">{{ w[2] }}</div>
+                    {% endif %}
+                </a>
+                {% endfor %}
+                {% else %}
+                <p class="empty-hint">You are not in any workspace yet. Create one or wait for an invitation.</p>
+                {% endif %}
+            </div>
+            <div class="tab-panel tab-panel--invites">
+                {% if workspace_invites %}
+                <table class="invite-table">
+                    <tr>
+                        <th>Workspace</th>
+                        <th>Invited</th>
+                        <th>Actions</th>
+                    </tr>
+                    {% for row in workspace_invites %}
+                    <tr>
+                        <td>{{ row[1] }}</td>
+                        <td>{{ row[3] }}</td>
+                        <td>
+                            <form style="display:inline" method="POST"
+                                action="/invitations/workspace/{{ row[0] }}/accept">
+                                <button type="submit">Accept</button>
+                            </form>
+                            <form style="display:inline" method="POST"
+                                action="/invitations/workspace/{{ row[0] }}/decline">
+                                <button type="submit">Decline</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% else %}
+                <p class="empty-hint">No pending workspace invitations. Channel invites are on the
+                    <a href="/invitations" style="color:#00c6ff;">Invitations</a> page.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

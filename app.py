@@ -45,7 +45,7 @@ def _require_user_id() -> int | None:
 def is_workspace_admin(cursor, uid: int, wid: int) -> bool:
     cursor.execute(
         """
-        SELECT 1 FROM workspacemember
+        SELECT 1 FROM "WorkspaceMember"
         WHERE wid = %s AND uid = %s AND joined_at IS NOT NULL AND role = 'admin'
         """,
         (wid, uid),
@@ -56,7 +56,7 @@ def is_workspace_admin(cursor, uid: int, wid: int) -> bool:
 def get_wmid_for_user_in_workspace(cursor, uid: int, wid: int):
     cursor.execute(
         """
-        SELECT wmid FROM workspacemember
+        SELECT wmid FROM "WorkspaceMember"
         WHERE uid = %s AND wid = %s AND joined_at IS NOT NULL
         """,
         (uid, wid),
@@ -72,9 +72,9 @@ def user_is_workspace_member(cursor, uid: int, wid: int) -> bool:
 def user_sent_message(cursor, mid: int, uid: int) -> bool:
     cursor.execute(
         """
-        SELECT 1 FROM message m
-        JOIN channelmember cm ON m.cmid = cm.cmid
-        JOIN workspacemember wm ON cm.wmid = wm.wmid
+        SELECT 1 FROM "Message" m
+        JOIN "ChannelMember" cm ON m.cmid = cm.cmid
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
         WHERE m.mid = %s AND wm.uid = %s
         """,
         (mid, uid),
@@ -88,7 +88,7 @@ def can_manage_channel_invites(cursor, uid: int, channel_wid: int, channel_name:
         return True
     cursor.execute(
         """
-        SELECT 1 FROM channel
+        SELECT 1 FROM "Channel"
         WHERE name = %s AND wid = %s AND created_by = %s
         """,
         (channel_name, channel_wid, uid),
@@ -199,30 +199,30 @@ def _load_sidebar_channels(cur, uid: int):
         """
         SELECT c.wid, c.name, c.type, w.name AS wname,
                EXISTS (
-                   SELECT 1 FROM channelmember cm2
-                   JOIN workspacemember wm2 ON cm2.wmid = wm2.wmid
+                   SELECT 1 FROM "ChannelMember" cm2
+                   JOIN "WorkspaceMember" wm2 ON cm2.wmid = wm2.wmid
                    WHERE cm2.channel_wid = c.wid
                      AND cm2.channel_name = c.name
                      AND wm2.uid = %s
                      AND wm2.wid = c.wid
                      AND cm2.joined_at IS NOT NULL
                ) AS is_joined
-        FROM channel c
-        JOIN workspace w ON c.wid = w.wid
-        JOIN workspacemember wm ON wm.wid = w.wid
+        FROM "Channel" c
+        JOIN "Workspace" w ON c.wid = w.wid
+        JOIN "WorkspaceMember" wm ON wm.wid = w.wid
             AND wm.uid = %s AND wm.joined_at IS NOT NULL
         WHERE
             c.type = 'public'
             OR (c.type = 'private' AND EXISTS (
-                SELECT 1 FROM channelmember cm3
-                JOIN workspacemember wmx ON cm3.wmid = wmx.wmid
+                SELECT 1 FROM "ChannelMember" cm3
+                JOIN "WorkspaceMember" wmx ON cm3.wmid = wmx.wmid
                 WHERE cm3.channel_wid = c.wid
                   AND cm3.channel_name = c.name
                   AND wmx.uid = %s
             ))
             OR (c.type = 'direct' AND EXISTS (
-                SELECT 1 FROM channelmember cm3
-                JOIN workspacemember wmx ON cm3.wmid = wmx.wmid
+                SELECT 1 FROM "ChannelMember" cm3
+                JOIN "WorkspaceMember" wmx ON cm3.wmid = wmx.wmid
                 WHERE cm3.channel_wid = c.wid
                   AND cm3.channel_name = c.name
                   AND wmx.uid = %s
@@ -237,6 +237,46 @@ def _load_sidebar_channels(cur, uid: int):
 
 @app.route("/home")
 def home():
+    """Dashboard: greeting, workspace list, pending workspace invites."""
+    if "user_id" not in session:
+        return redirect("/login")
+    uid = int(session["user_id"])
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT w.wid, w.name, w.description
+        FROM "Workspace" w
+        JOIN "WorkspaceMember" wm ON w.wid = wm.wid
+        WHERE wm.uid = %s AND wm.joined_at IS NOT NULL
+        ORDER BY w.name
+        """,
+        (uid,),
+    )
+    workspaces_list = cur.fetchall()
+    cur.execute(
+        """
+        SELECT wm.wmid, w.name, w.wid, wm.invited_at
+        FROM "WorkspaceMember" wm
+        JOIN "Workspace" w ON w.wid = wm.wid
+        WHERE wm.uid = %s AND wm.joined_at IS NULL AND wm.invited_at IS NOT NULL
+        ORDER BY wm.invited_at DESC
+        """,
+        (uid,),
+    )
+    workspace_invites = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template(
+        "home_dashboard.html",
+        workspaces=workspaces_list,
+        workspace_invites=workspace_invites,
+    )
+
+
+@app.route("/chat")
+def chat():
+    """Main messaging UI with channel sidebar (opened from a channel link)."""
     if "user_id" not in session:
         return redirect("/login")
     uid = int(session["user_id"])
@@ -256,8 +296,8 @@ def home():
         cur.execute(
             """
             SELECT 1
-            FROM channel ch
-            JOIN workspacemember wm ON ch.wid = wm.wid
+            FROM "Channel" ch
+            JOIN "WorkspaceMember" wm ON ch.wid = wm.wid
             WHERE ch.wid = %s AND ch.name = %s
               AND wm.uid = %s AND wm.joined_at IS NOT NULL
             """,
@@ -271,9 +311,9 @@ def home():
         cur.execute(
             """
             SELECT 1
-            FROM channel ch
-            JOIN channelmember cm ON ch.name = cm.channel_name AND ch.wid = cm.channel_wid
-            JOIN workspacemember wm ON cm.wmid = wm.wmid
+            FROM "Channel" ch
+            JOIN "ChannelMember" cm ON ch.name = cm.channel_name AND ch.wid = cm.channel_wid
+            JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
             WHERE ch.wid = %s AND ch.name = %s AND wm.uid = %s
               AND cm.joined_at IS NOT NULL
             """,
@@ -295,16 +335,15 @@ def home():
                     WHEN m.sent_at > NOW() - INTERVAL '2 minutes' THEN TRUE
                     ELSE FALSE
                 END AS can_recall
-            FROM message m
-            JOIN channelmember cm ON m.cmid = cm.cmid
-            JOIN workspacemember wm ON cm.wmid = wm.wmid
+            FROM "Message" m
+            JOIN "ChannelMember" cm ON m.cmid = cm.cmid
+            JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
             JOIN "User" u ON wm.uid = u.uid
-            LEFT JOIN message_hidden mh ON m.mid = mh.mid AND mh.uid = %s
             WHERE m.channel_wid = %s AND m.channel_name = %s
-              AND mh.mid IS NULL
+              AND NOT m.is_deleted
             ORDER BY m.sent_at
             """,
-            (uid, channel_wid, channel_name),
+            (channel_wid, channel_name),
         )
         messages = cur.fetchall()
 
@@ -312,7 +351,7 @@ def home():
     conn.close()
 
     return render_template(
-        "home.html",
+        "chat.html",
         channels=channels,
         messages=messages,
         channel_wid=channel_wid,
@@ -332,8 +371,8 @@ def workspaces():
     cur.execute(
         """
         SELECT w.wid, w.name, w.description
-        FROM workspace w
-        JOIN workspacemember wm ON w.wid = wm.wid
+        FROM "Workspace" w
+        JOIN "WorkspaceMember" wm ON w.wid = wm.wid
         WHERE wm.uid = %s AND wm.joined_at IS NOT NULL
         ORDER BY w.name
         """,
@@ -358,7 +397,7 @@ def create_workspace():
         try:
             cur.execute(
                 """
-                INSERT INTO workspace (name, description, created_at, created_by)
+                INSERT INTO "Workspace" (name, description, created_at, created_by)
                 VALUES (%s, %s, NOW(), %s)
                 RETURNING wid
                 """,
@@ -370,7 +409,7 @@ def create_workspace():
                 raise RuntimeError("workspace insert failed")
             cur.execute(
                 """
-                INSERT INTO workspacemember (uid, wid, role, invited_at, joined_at)
+                INSERT INTO "WorkspaceMember" (uid, wid, role, invited_at, joined_at)
                 VALUES (%s, %s, 'admin', NOW(), NOW())
                 """,
                 (uid, wid),
@@ -397,10 +436,10 @@ def workspace_detail(workspace_id):
         cur.close()
         conn.close()
         return "You are not a member of this workspace.", 403
-    cur.execute("SELECT * FROM workspace WHERE wid = %s", (workspace_id,))
+    cur.execute('SELECT * FROM "Workspace" WHERE wid = %s', (workspace_id,))
     workspace = cur.fetchone()
     cur.execute(
-        "SELECT * FROM channel WHERE wid = %s ORDER BY name", (workspace_id,)
+        'SELECT * FROM "Channel" WHERE wid = %s ORDER BY name', (workspace_id,)
     )
     chlist = cur.fetchall()
     members = None
@@ -408,7 +447,7 @@ def workspace_detail(workspace_id):
         cur.execute(
             """
             SELECT u.uid, u.nickname, u.email
-            FROM workspacemember wm
+            FROM "WorkspaceMember" wm
             JOIN "User" u ON wm.uid = u.uid
             WHERE wm.wid = %s AND wm.joined_at IS NOT NULL
             ORDER BY u.nickname
@@ -455,7 +494,7 @@ def invite_to_workspace(workspace_id):
         try:
             cur.execute(
                 """
-                INSERT INTO workspacemember (uid, wid, role, invited_at, joined_at)
+                INSERT INTO "WorkspaceMember" (uid, wid, role, invited_at, joined_at)
                 VALUES (%s, %s, 'member', NOW(), NULL)
                 """,
                 (target_uid, workspace_id),
@@ -486,8 +525,8 @@ def invitations():
     cur.execute(
         """
         SELECT wm.wmid, w.name, w.wid, wm.invited_at
-        FROM workspacemember wm
-        JOIN workspace w ON w.wid = wm.wid
+        FROM "WorkspaceMember" wm
+        JOIN "Workspace" w ON w.wid = wm.wid
         WHERE wm.uid = %s AND wm.joined_at IS NULL AND wm.invited_at IS NOT NULL
         """,
         (uid,),
@@ -496,9 +535,9 @@ def invitations():
     cur.execute(
         """
         SELECT cm.cmid, c.name, c.wid, cm.invited_at, c.type
-        FROM channelmember cm
-        JOIN workspacemember wm ON cm.wmid = wm.wmid
-        JOIN channel c ON c.wid = cm.channel_wid AND c.name = cm.channel_name
+        FROM "ChannelMember" cm
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
+        JOIN "Channel" c ON c.wid = cm.channel_wid AND c.name = cm.channel_name
         WHERE wm.uid = %s
           AND cm.joined_at IS NULL
           AND cm.invited_at IS NOT NULL
@@ -520,7 +559,7 @@ def accept_workspace_invite(wmid):
     cur = conn.cursor()
     cur.execute(
         """
-        UPDATE workspacemember
+        UPDATE "WorkspaceMember"
         SET joined_at = NOW()
         WHERE wmid = %s AND uid = %s
           AND joined_at IS NULL AND invited_at IS NOT NULL
@@ -541,7 +580,7 @@ def decline_workspace_invite(wmid):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "DELETE FROM workspacemember WHERE wmid = %s AND uid = %s",
+        'DELETE FROM "WorkspaceMember" WHERE wmid = %s AND uid = %s',
         (wmid, uid),
     )
     conn.commit()
@@ -559,11 +598,11 @@ def accept_channel_invite(cmid):
     cur = conn.cursor()
     cur.execute(
         """
-        UPDATE channelmember SET joined_at = NOW()
+        UPDATE "ChannelMember" SET joined_at = NOW()
         WHERE cmid = %s
           AND joined_at IS NULL
           AND invited_at IS NOT NULL
-          AND wmid IN (SELECT wmid FROM workspacemember WHERE uid = %s)
+          AND wmid IN (SELECT wmid FROM "WorkspaceMember" WHERE uid = %s)
         """,
         (cmid, uid),
     )
@@ -585,9 +624,9 @@ def decline_channel_invite(cmid):
     cur = conn.cursor()
     cur.execute(
         """
-        DELETE FROM channelmember
+        DELETE FROM "ChannelMember"
         WHERE cmid = %s
-          AND wmid IN (SELECT wmid FROM workspacemember WHERE uid = %s)
+          AND wmid IN (SELECT wmid FROM "WorkspaceMember" WHERE uid = %s)
         """,
         (cmid, uid),
     )
@@ -611,7 +650,7 @@ def join_public_channel():
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT type FROM channel WHERE wid = %s AND name = %s",
+        'SELECT type FROM "Channel" WHERE wid = %s AND name = %s',
         (channel_wid, channel_name),
     )
     r = cur.fetchone()
@@ -627,7 +666,7 @@ def join_public_channel():
     try:
         cur.execute(
             """
-            INSERT INTO channelmember (wmid, channel_name, channel_wid, joined_at, invited_at)
+            INSERT INTO "ChannelMember" (wmid, channel_name, channel_wid, joined_at, invited_at)
             VALUES (%s, %s, %s, NOW(), NOW())
             """,
             (wmid, channel_name, channel_wid),
@@ -637,7 +676,7 @@ def join_public_channel():
         conn.rollback()
         cur.execute(
             """
-            UPDATE channelmember SET joined_at = NOW()
+            UPDATE "ChannelMember" SET joined_at = NOW()
             WHERE wmid = %s AND channel_wid = %s AND channel_name = %s
               AND joined_at IS NULL
             """,
@@ -647,7 +686,7 @@ def join_public_channel():
     cur.close()
     conn.close()
     qn = quote(channel_name, safe="")
-    return redirect(f"/home?channel_wid={channel_wid}&channel_name={qn}")
+    return redirect(f"/chat?channel_wid={channel_wid}&channel_name={qn}")
 
 
 @app.route(
@@ -667,7 +706,7 @@ def create_channel(workspace_id):
     cur.execute(
         """
         SELECT u.uid, u.nickname, u.email
-        FROM workspacemember wm
+        FROM "WorkspaceMember" wm
         JOIN "User" u ON wm.uid = u.uid
         WHERE wm.wid = %s AND wm.joined_at IS NOT NULL AND u.uid != %s
         ORDER BY u.nickname
@@ -685,7 +724,7 @@ def create_channel(workspace_id):
         try:
             cur.execute(
                 """
-                INSERT INTO channel (name, wid, type, created_by)
+                INSERT INTO "Channel" (name, wid, type, created_by)
                 VALUES (%s, %s, %s, %s)
                 """,
                 (name, workspace_id, ch_type, uid),
@@ -700,7 +739,7 @@ def create_channel(workspace_id):
             if my_wmid is not None:
                 cur.execute(
                     """
-                    INSERT INTO channelmember (wmid, channel_name, channel_wid, joined_at, invited_at)
+                    INSERT INTO "ChannelMember" (wmid, channel_name, channel_wid, joined_at, invited_at)
                     VALUES (%s, %s, %s, NOW(), NOW())
                     """,
                     (my_wmid, name, workspace_id),
@@ -719,7 +758,7 @@ def create_channel(workspace_id):
                 return "Both users must be in this workspace to create a direct channel", 400
             cur.execute(
                 """
-                INSERT INTO channelmember (wmid, channel_name, channel_wid, joined_at, invited_at)
+                INSERT INTO "ChannelMember" (wmid, channel_name, channel_wid, joined_at, invited_at)
                 VALUES
                   (%s, %s, %s, NOW(), NOW()),
                   (%s, %s, %s, NOW(), NOW())
@@ -737,7 +776,7 @@ def create_channel(workspace_id):
         cur.close()
         conn.close()
         return redirect(
-            f"/home?channel_wid={workspace_id}&channel_name={qn}"
+            f"/chat?channel_wid={workspace_id}&channel_name={qn}"
         )
     cur.close()
     conn.close()
@@ -760,7 +799,7 @@ def invite_to_channel(channel_wid, channel_name):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT type FROM channel WHERE wid = %s AND name = %s",
+        'SELECT type FROM "Channel" WHERE wid = %s AND name = %s',
         (channel_wid, channel_name),
     )
     row = cur.fetchone()
@@ -785,7 +824,7 @@ def invite_to_channel(channel_wid, channel_name):
         try:
             cur.execute(
                 """
-                INSERT INTO channelmember (wmid, channel_name, channel_wid, invited_at, joined_at)
+                INSERT INTO "ChannelMember" (wmid, channel_name, channel_wid, invited_at, joined_at)
                 VALUES (%s, %s, %s, NOW(), NULL)
                 """,
                 (wmid, channel_name, channel_wid),
@@ -799,12 +838,12 @@ def invite_to_channel(channel_wid, channel_name):
         cur.close()
         conn.close()
         return redirect(
-            f"/home?channel_wid={channel_wid}&channel_name={quote(channel_name, safe='')}"
+            f"/chat?channel_wid={channel_wid}&channel_name={quote(channel_name, safe='')}"
         )
     cur.execute(
         """
         SELECT u.uid, u.nickname, u.email
-        FROM workspacemember wm
+        FROM "WorkspaceMember" wm
         JOIN "User" u ON u.uid = wm.uid
         WHERE wm.wid = %s
           AND wm.joined_at IS NOT NULL
@@ -836,7 +875,7 @@ def delete_channel(name, channel_wid):
         conn.close()
         return "Only workspace admins can delete channels", 403
     cur.execute(
-        "DELETE FROM channel WHERE name = %s AND wid = %s", (name, channel_wid)
+        'DELETE FROM "Channel" WHERE name = %s AND wid = %s', (name, channel_wid)
     )
     conn.commit()
     cur.close()
@@ -854,11 +893,12 @@ def channel_detail(name, channel_wid):
     cur.execute(
         """
         SELECT m.mid, m.content, u.nickname
-        FROM message m
-        JOIN channelmember cm ON m.cmid = cm.cmid
-        JOIN workspacemember wm ON cm.wmid = wm.wmid
+        FROM "Message" m
+        JOIN "ChannelMember" cm ON m.cmid = cm.cmid
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
         JOIN "User" u ON wm.uid = u.uid
         WHERE m.channel_wid = %s AND m.channel_name = %s
+          AND NOT m.is_deleted
         ORDER BY m.sent_at
         """,
         (channel_wid, name),
@@ -882,7 +922,7 @@ def send_message():
     channel_wid = request.form.get("channel_wid", type=int)
     channel_name = request.form.get("channel_name")
     if not content or not channel_wid or not channel_name:
-        return redirect(request.referrer or "/home")
+        return redirect(request.referrer or "/chat")
     channel_name = unquote(channel_name)
     uid = int(session["user_id"])
     conn = get_db()
@@ -890,8 +930,8 @@ def send_message():
     cur.execute(
         """
         SELECT cm.cmid, cm.channel_name, cm.channel_wid
-        FROM channelmember cm
-        JOIN workspacemember wm ON cm.wmid = wm.wmid
+        FROM "ChannelMember" cm
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
         WHERE wm.uid = %s
           AND cm.channel_wid = %s
           AND cm.channel_name = %s
@@ -908,7 +948,7 @@ def send_message():
     try:
         cur.execute(
             """
-            INSERT INTO message (content, channel_name, channel_wid, cmid, sent_at)
+            INSERT INTO "Message" (content, channel_name, channel_wid, cmid, sent_at)
             VALUES (%s, %s, %s, %s, NOW())
             """,
             (content, ch_name, ch_wid, cmid),
@@ -923,7 +963,7 @@ def send_message():
     conn.close()
     qn = quote(channel_name, safe="")
     return redirect(
-        f"/home?channel_wid={channel_wid}&channel_name={qn}"
+        f"/chat?channel_wid={channel_wid}&channel_name={qn}"
     )
 
 
@@ -941,8 +981,8 @@ def recall_message(mid):
     try:
         cur.execute(
             """
-            UPDATE message
-            SET content = '[message was recalled]'
+            UPDATE "Message"
+            SET content = '[message was recalled]', is_recalled = TRUE
             WHERE mid = %s
             """,
             (mid,),
@@ -952,7 +992,7 @@ def recall_message(mid):
         conn.rollback()
     cur.close()
     conn.close()
-    return redirect(request.referrer or "/home")
+    return redirect(request.referrer or "/chat")
 
 
 @app.route("/delete_message/<int:mid>")
@@ -968,15 +1008,15 @@ def delete_message(mid):
         return "Not your message", 403
     try:
         cur.execute(
-            "INSERT INTO message_hidden (mid, uid) VALUES (%s, %s)",
-            (mid, uid),
+            'UPDATE "Message" SET is_deleted = TRUE WHERE mid = %s',
+            (mid,),
         )
         conn.commit()
-    except errors.UniqueViolation:
+    except Exception:  # noqa: BLE001
         conn.rollback()
     cur.close()
     conn.close()
-    return redirect(request.referrer or "/home")
+    return redirect(request.referrer or "/chat")
 
 
 @app.route("/search", methods=["GET"])
@@ -994,16 +1034,17 @@ def search_messages():
         """
         SELECT DISTINCT ON (m.mid) m.content, m.sent_at, ch.name, ch.wid, send.nickname,
                m.channel_name, m.channel_wid
-        FROM message m
-        JOIN channel ch ON ch.name = m.channel_name AND ch.wid = m.channel_wid
-        JOIN channelmember cm_send ON m.cmid = cm_send.cmid
-        JOIN workspacemember wm_send ON cm_send.wmid = wm_send.wmid
+        FROM "Message" m
+        JOIN "Channel" ch ON ch.name = m.channel_name AND ch.wid = m.channel_wid
+        JOIN "ChannelMember" cm_send ON m.cmid = cm_send.cmid
+        JOIN "WorkspaceMember" wm_send ON cm_send.wmid = wm_send.wmid
         JOIN "User" send ON send.uid = wm_send.uid
-        JOIN channelmember cm_v
+        JOIN "ChannelMember" cm_v
           ON cm_v.channel_wid = m.channel_wid AND cm_v.channel_name = m.channel_name
-        JOIN workspacemember wm_v ON cm_v.wmid = wm_v.wmid
+        JOIN "WorkspaceMember" wm_v ON cm_v.wmid = wm_v.wmid
         WHERE wm_v.uid = %s
           AND cm_v.joined_at IS NOT NULL
+          AND NOT m.is_deleted
           AND m.content ILIKE %s
         ORDER BY m.mid, m.sent_at DESC
         """,

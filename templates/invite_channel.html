@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Invite to private channel</title>
     <style>
@@ -11,6 +12,7 @@
             margin: 0;
             padding: 20px;
         }
+
         .card {
             background: white;
             color: black;
@@ -20,8 +22,18 @@
             border-radius: 10px;
             text-align: center;
         }
-        .card h1 { color: #00c6ff; margin-top: 0; }
-        .card select { width: 90%; padding: 8px; margin: 10px 0; }
+
+        .card h1 {
+            color: #00c6ff;
+            margin-top: 0;
+        }
+
+        .card select {
+            width: 90%;
+            padding: 8px;
+            margin: 10px 0;
+        }
+
         .card button {
             padding: 10px 20px;
             background: #00c6ff;
@@ -30,13 +42,19 @@
             cursor: pointer;
             border-radius: 6px;
         }
-        .card a { color: #00c6ff; font-weight: bold; }
+
+        .card a {
+            color: #00c6ff;
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
     <div class="card">
         <h1>Invite to #{{ channel_name }}</h1>
-        <p style="text-align: left; font-size: 14px;">User must already be a <b>full member</b> of the workspace (accepted invite).</p>
+        <p style="text-align: left; font-size: 14px;">User must already be a <b>full member</b> of the workspace
+            (accepted invite).</p>
         <form method="POST">
             <label>Member
                 <select name="target_uid" required>
@@ -47,7 +65,8 @@
             </label>
             <p><button type="submit">Send channel invite</button></p>
         </form>
-        <p><a href="{{ url_for('home', channel_wid=channel_wid, channel_name=channel_name) }}">Back to channel</a></p>
+        <p><a href="{{ url_for('chat', channel_wid=channel_wid, channel_name=channel_name) }}">Back to channel</a></p>
     </div>
 </body>
+
 </html>
