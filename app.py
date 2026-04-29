@@ -1241,6 +1241,55 @@ def join_public_channel():
     return redirect(f"/chat?channel_wid={channel_wid}&channel_name={qn}")
 
 
+@app.route("/channel/join_private")
+def join_private_channel():
+    """Accept a pending private-channel invite (GET); redirect to chat like public Join."""
+    if "user_id" not in session:
+        return redirect("/login")
+    channel_wid = request.args.get("channel_wid", type=int)
+    channel_name = request.args.get("channel_name", type=str)
+    if not channel_wid or not channel_name:
+        return "Missing parameters", 400
+    channel_name = unquote(channel_name)
+    uid = int(session["user_id"])
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        'SELECT type FROM "Channel" WHERE wid = %s AND name = %s',
+        (channel_wid, channel_name),
+    )
+    r = cur.fetchone()
+    if not r or r[0] != "private":
+        cur.close()
+        conn.close()
+        return "This channel is not a private channel or does not exist.", 403
+    cur.execute(
+        """
+        UPDATE "ChannelMember" cm
+        SET joined_at = NOW()
+        FROM "WorkspaceMember" wm
+        WHERE cm.wmid = wm.wmid
+          AND wm.uid = %s
+          AND wm.wid = %s
+          AND cm.channel_wid = %s
+          AND cm.channel_name = %s
+          AND cm.joined_at IS NULL
+          AND cm.invited_at IS NOT NULL
+        """,
+        (uid, channel_wid, channel_wid, channel_name),
+    )
+    if cur.rowcount == 0:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return "No pending invite for this channel.", 400
+    conn.commit()
+    cur.close()
+    conn.close()
+    qn = quote(channel_name, safe="")
+    return redirect(f"/chat?channel_wid={channel_wid}&channel_name={qn}")
+
+
 @app.route(
     "/channel/create/<int:workspace_id>",
     methods=["GET", "POST"],
@@ -1363,48 +1412,84 @@ def invite_to_channel(channel_wid, channel_name):
         cur.close()
         conn.close()
         return "Not allowed to invite to this channel.", 403
+
+    def fetch_channel_invite_candidates():
+        """Workspace members who are not already in or invited to this channel."""
+        cur.execute(
+            """
+            SELECT u.uid, u.nickname, u.email
+            FROM "WorkspaceMember" wm
+            JOIN "User" u ON u.uid = wm.uid
+            WHERE wm.wid = %s
+              AND wm.joined_at IS NOT NULL
+              AND wm.uid != %s
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "ChannelMember" cm
+                WHERE cm.wmid = wm.wmid
+                  AND cm.channel_wid = %s
+                  AND cm.channel_name = %s
+              )
+            ORDER BY u.nickname
+            """,
+            (channel_wid, uid, channel_wid, channel_name),
+        )
+        return _dict_rows(("uid", "nickname", "email"), cur.fetchall())
+
     if request.method == "POST":
         target_uid = request.form.get("target_uid", type=int)
+        error_message = None
         wmid = get_wmid_for_user_in_workspace(cur, target_uid, channel_wid) if target_uid else None
-        if not wmid:
-            cur.close()
-            conn.close()
-            return (
-                "Invitee must be a full member of the workspace (joined) before channel invite",
-                400,
+        if not target_uid:
+            error_message = "Select a member to invite."
+        elif not wmid:
+            error_message = (
+                "Invitee must be a full member of the workspace (joined) before channel invite."
             )
-        try:
+        else:
             cur.execute(
                 """
-                INSERT INTO "ChannelMember" (wmid, channel_name, channel_wid, invited_at, joined_at)
-                VALUES (%s, %s, %s, NOW(), NULL)
+                SELECT 1 FROM "ChannelMember"
+                WHERE wmid = %s AND channel_wid = %s AND channel_name = %s
                 """,
-                (wmid, channel_name, channel_wid),
+                (wmid, channel_wid, channel_name),
             )
-            conn.commit()
-        except errors.UniqueViolation:
-            conn.rollback()
-            cur.close()
-            conn.close()
-            return "User already a member or invited to this channel", 400
+            if cur.fetchone():
+                error_message = (
+                    "That user is already a member or has a pending invite for this channel."
+                )
+            else:
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO "ChannelMember" (wmid, channel_name, channel_wid, invited_at, joined_at)
+                        VALUES (%s, %s, %s, NOW(), NULL)
+                        """,
+                        (wmid, channel_name, channel_wid),
+                    )
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                    return redirect(
+                        f"/chat?channel_wid={channel_wid}&channel_name={quote(channel_name, safe='')}"
+                    )
+                except errors.UniqueViolation:
+                    conn.rollback()
+                    error_message = (
+                        "That user is already a member or has a pending invite for this channel."
+                    )
+        candidates = fetch_channel_invite_candidates()
         cur.close()
         conn.close()
-        return redirect(
-            f"/chat?channel_wid={channel_wid}&channel_name={quote(channel_name, safe='')}"
+        return render_template(
+            "invite_channel.html",
+            channel_wid=channel_wid,
+            channel_name=channel_name,
+            candidates=candidates,
+            error=error_message,
         )
-    cur.execute(
-        """
-        SELECT u.uid, u.nickname, u.email
-        FROM "WorkspaceMember" wm
-        JOIN "User" u ON u.uid = wm.uid
-        WHERE wm.wid = %s
-          AND wm.joined_at IS NOT NULL
-          AND wm.uid != %s
-        ORDER BY u.nickname
-        """,
-        (channel_wid, uid),
-    )
-    candidates = _dict_rows(("uid", "nickname", "email"), cur.fetchall())
+
+    candidates = fetch_channel_invite_candidates()
     cur.close()
     conn.close()
     return render_template(
@@ -1412,6 +1497,7 @@ def invite_to_channel(channel_wid, channel_name):
         channel_wid=channel_wid,
         channel_name=channel_name,
         candidates=candidates,
+        error=None,
     )
 
 

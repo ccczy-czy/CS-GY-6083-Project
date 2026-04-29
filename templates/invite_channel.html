@@ -47,6 +47,19 @@
             color: #00c6ff;
             font-weight: bold;
         }
+
+        .err {
+            color: #c62828;
+            text-align: center;
+            margin: 0 0 12px;
+        }
+
+        .empty-hint {
+            color: #555;
+            font-size: 14px;
+            text-align: left;
+            margin: 12px 0;
+        }
     </style>
 </head>
 
@@ -55,6 +68,8 @@
         <h1>Invite to #{{ channel_name }}</h1>
         <p style="text-align: left; font-size: 14px;">User must already be a <b>full member</b> of the workspace
             (accepted invite).</p>
+        {% if error %}<p class="err">{{ error }}</p>{% endif %}
+        {% if candidates %}
         <form method="POST">
             <label>Member
                 <select name="target_uid" required>
@@ -65,6 +80,10 @@
             </label>
             <p><button type="submit">Send channel invite</button></p>
         </form>
+        {% else %}
+        <p class="empty-hint">No workspace members left to invite: everyone else is already in this channel or has a
+            pending invite.</p>
+        {% endif %}
         <p><a href="{{ url_for('chat', channel_wid=channel_wid, channel_name=channel_name) }}">Back to channel</a></p>
     </div>
 </body>

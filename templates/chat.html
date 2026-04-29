@@ -179,6 +179,8 @@
                 <strong>{{ c.name }}</strong><br>
                 {% if c.channel_type == "public" and not c.is_joined %}
                 <a href="{{ url_for('join_public_channel', channel_wid=c.wid, channel_name=c.name) }}">Join</a>
+                {% elif c.channel_type == "private" and not c.is_joined %}
+                <a href="{{ url_for('join_private_channel', channel_wid=c.wid, channel_name=c.name) }}">Join</a>
                 {% else %}
                 <a href="{{ url_for('chat', channel_wid=c.wid, channel_name=c.name) }}">Open</a>
                 {% endif %}
