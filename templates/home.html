@@ -172,6 +172,16 @@
             border-radius: 4px;
             margin-right: 4px;
         }
+
+        .tab-panel h2 {
+            color: #00c6ff;
+            font-size: 1.1em;
+            margin: 16px 0 8px;
+        }
+
+        .tab-panel h2:first-of-type {
+            margin-top: 0;
+        }
     </style>
 </head>
 
@@ -193,7 +203,7 @@
             <input type="radio" name="home-tab" id="tab-invites">
             <div class="tab-labels">
                 <label for="tab-workspaces">My workspaces</label>
-                <label for="tab-invites">Pending workspace invitations</label>
+                <label for="tab-invites">Pending invitations</label>
             </div>
             <div class="tab-panel tab-panel--workspaces">
                 {% if workspaces %}
@@ -211,6 +221,7 @@
             </div>
             <div class="tab-panel tab-panel--invites">
                 {% if workspace_invites %}
+                <h2>Workspaces</h2>
                 <table class="invite-table">
                     <tr>
                         <th>Workspace</th>
@@ -234,10 +245,37 @@
                     </tr>
                     {% endfor %}
                 </table>
-                {% else %}
-                <p class="empty-hint">No pending workspace invitations. Channel invites are on the
-                    <a href="/invitations" style="color:#00c6ff;">Invitations</a> page.
-                </p>
+                {% endif %}
+                {% if channel_invites %}
+                <h2>Channels</h2>
+                <table class="invite-table">
+                    <tr>
+                        <th>Channel</th>
+                        <th>Type</th>
+                        <th>Invited</th>
+                        <th>Actions</th>
+                    </tr>
+                    {% for row in channel_invites %}
+                    <tr>
+                        <td>{{ row.channel_name }} (ws id {{ row.wid }})</td>
+                        <td>{{ row.channel_type }}</td>
+                        <td>{{ row.invited_at }}</td>
+                        <td>
+                            <form style="display:inline" method="POST"
+                                action="/invitations/channel/{{ row.cmid }}/accept">
+                                <button type="submit">Accept</button>
+                            </form>
+                            <form style="display:inline" method="POST"
+                                action="/invitations/channel/{{ row.cmid }}/decline">
+                                <button type="submit">Decline</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+                {% if not workspace_invites and not channel_invites %}
+                <p class="empty-hint">No pending invitations.</p>
                 {% endif %}
             </div>
         </div>

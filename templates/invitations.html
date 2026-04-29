@@ -15,11 +15,37 @@
         h1 {
             max-width: 768px;
             margin: 20px auto;
+            text-align: center;
         }
 
         h1,
         h2 {
             color: #00c6ff;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0 auto 24px;
+            max-width: 768px;
+        }
+
+        .btn-home {
+            display: inline-block;
+            padding: 10px 18px;
+            background: #00c6ff;
+            color: white;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-home:hover {
+            background: #00a8d8;
         }
 
         .card {
@@ -68,6 +94,9 @@
 
 <body>
     <h1>Pending invitations</h1>
+    <div class="toolbar">
+        <a class="btn-home" href="/home">Home</a>
+    </div>
     <div class="card">
         <h2>Workspaces</h2>
         {% if workspace_invites %}
@@ -126,7 +155,6 @@
         <p>None</p>
         {% endif %}
     </div>
-    <p style="text-align:center"><a href="/home">Home</a></p>
 </body>
 
 </html>

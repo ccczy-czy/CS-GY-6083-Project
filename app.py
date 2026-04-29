@@ -626,7 +626,7 @@ def _load_sidebar_channels(cur, uid: int):
 
 @app.route("/home")
 def home():
-    """Dashboard: greeting, workspace list, pending workspace invites."""
+    """Dashboard: greeting, workspace list, pending workspace and channel invites."""
     if "user_id" not in session:
         return redirect("/login")
     uid = int(session["user_id"])
@@ -656,12 +656,28 @@ def home():
     workspace_invites = _dict_rows(
         ("wmid", "workspace_name", "wid", "invited_at"), cur.fetchall()
     )
+    cur.execute(
+        """
+        SELECT cm.cmid, c.name, c.wid, cm.invited_at, c.type
+        FROM "ChannelMember" cm
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
+        JOIN "Channel" c ON c.wid = cm.channel_wid AND c.name = cm.channel_name
+        WHERE wm.uid = %s
+          AND cm.joined_at IS NULL
+          AND cm.invited_at IS NOT NULL
+        """,
+        (uid,),
+    )
+    channel_invites = _dict_rows(
+        ("cmid", "channel_name", "wid", "invited_at", "channel_type"), cur.fetchall()
+    )
     cur.close()
     conn.close()
     return render_template(
         "home.html",
         workspaces=workspaces_list,
         workspace_invites=workspace_invites,
+        channel_invites=channel_invites,
     )
 
 
