@@ -773,29 +773,6 @@ def chat():
     )
 
 
-@app.route("/workspaces")
-def workspaces():
-    if "user_id" not in session:
-        return redirect("/login")
-    uid = int(session["user_id"])
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT w.wid, w.name, w.description
-        FROM "Workspace" w
-        JOIN "WorkspaceMember" wm ON w.wid = wm.wid
-        WHERE wm.uid = %s AND wm.joined_at IS NOT NULL
-        ORDER BY w.name
-        """,
-        (uid,),
-    )
-    data = _dict_rows(("wid", "name", "description"), cur.fetchall())
-    cur.close()
-    conn.close()
-    return render_template("workspaces.html", workspaces=data)
-
-
 @app.route("/create_workspace", methods=["GET", "POST"])
 def create_workspace():
     if "user_id" not in session:
