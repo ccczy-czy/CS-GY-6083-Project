@@ -110,6 +110,64 @@ def user_sent_message(cursor, mid: int, uid: int) -> bool:
     return cursor.fetchone() is not None
 
 
+def user_in_workspace_for_channel(
+    cursor, uid: int, channel_wid: int, channel_name: str
+) -> bool:
+    """True if uid is an active workspace member for the workspace that owns this channel."""
+    cursor.execute(
+        """
+        SELECT 1
+        FROM "Channel" ch
+        JOIN "WorkspaceMember" wm ON ch.wid = wm.wid
+        WHERE ch.wid = %s AND ch.name = %s
+          AND wm.uid = %s AND wm.joined_at IS NOT NULL
+        """,
+        (channel_wid, channel_name, uid),
+    )
+    return cursor.fetchone() is not None
+
+
+def user_joined_channel_for_chat(
+    cursor, uid: int, channel_wid: int, channel_name: str
+) -> bool:
+    """True if uid has joined this channel (ChannelMember.joined_at set)."""
+    cursor.execute(
+        """
+        SELECT 1
+        FROM "Channel" ch
+        JOIN "ChannelMember" cm ON ch.name = cm.channel_name AND ch.wid = cm.channel_wid
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
+        WHERE ch.wid = %s AND ch.name = %s AND wm.uid = %s
+          AND cm.joined_at IS NOT NULL
+        """,
+        (channel_wid, channel_name, uid),
+    )
+    return cursor.fetchone() is not None
+
+
+def _fetch_channel_members_sidebar(
+    cursor, channel_wid: int, channel_name: str
+) -> list[dict[str, object]]:
+    """Joined members plus users with a pending channel invite (not yet accepted)."""
+    cursor.execute(
+        """
+        SELECT u.uid, COALESCE(NULLIF(TRIM(u.nickname), ''), u.username) AS display,
+               (cm.joined_at IS NULL) AS is_pending
+        FROM "ChannelMember" cm
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
+        JOIN "User" u ON wm.uid = u.uid
+        WHERE cm.channel_wid = %s AND cm.channel_name = %s
+          AND (
+            cm.joined_at IS NOT NULL
+            OR (cm.invited_at IS NOT NULL AND cm.joined_at IS NULL)
+          )
+        ORDER BY (cm.joined_at IS NULL) ASC, display ASC
+        """,
+        (channel_wid, channel_name),
+    )
+    return _dict_rows(("uid", "display", "is_pending"), cursor.fetchall())
+
+
 def _email_format_ok(value: str) -> bool:
     if not value or "@" not in value:
         return False
@@ -717,34 +775,13 @@ def chat():
 
     current_channel = None
     messages = []
+    channel_members: list[dict[str, object]] = []
     if channel_wid and channel_name:
-        cur.execute(
-            """
-            SELECT 1
-            FROM "Channel" ch
-            JOIN "WorkspaceMember" wm ON ch.wid = wm.wid
-            WHERE ch.wid = %s AND ch.name = %s
-              AND wm.uid = %s AND wm.joined_at IS NOT NULL
-            """,
-            (channel_wid, channel_name, uid),
-        )
-        if not cur.fetchone():
+        if not user_in_workspace_for_channel(cur, uid, channel_wid, channel_name):
             cur.close()
             conn.close()
             return "Not a member of this workspace or invalid channel", 403
-
-        cur.execute(
-            """
-            SELECT 1
-            FROM "Channel" ch
-            JOIN "ChannelMember" cm ON ch.name = cm.channel_name AND ch.wid = cm.channel_wid
-            JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
-            WHERE ch.wid = %s AND ch.name = %s AND wm.uid = %s
-              AND cm.joined_at IS NOT NULL
-            """,
-            (channel_wid, channel_name, uid),
-        )
-        if not cur.fetchone():
+        if not user_joined_channel_for_chat(cur, uid, channel_wid, channel_name):
             cur.close()
             conn.close()
             return (
@@ -777,6 +814,9 @@ def chat():
         messages = _dict_rows(
             ("mid", "content", "nickname", "sent_at", "can_recall"), cur.fetchall()
         )
+        channel_members = _fetch_channel_members_sidebar(
+            cur, channel_wid, channel_name
+        )
 
     cur.close()
     conn.close()
@@ -788,6 +828,7 @@ def chat():
         channel_wid=channel_wid,
         channel_name=channel_name,
         current_channel=current_channel,
+        channel_members=channel_members,
     )
 
 

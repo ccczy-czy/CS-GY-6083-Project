@@ -55,10 +55,19 @@
             color: #aaa;
         }
 
+        .chat-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            min-width: 0;
+            min-height: 0;
+        }
+
         .chat {
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-width: 0;
         }
 
         .topbar {
@@ -66,6 +75,92 @@
             padding: 10px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .members-sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            background: #eceff4;
+            border-left: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.2s ease, opacity 0.2s ease;
+            overflow: hidden;
+        }
+
+        .members-sidebar.is-collapsed {
+            width: 0;
+            border-left-width: 0;
+            opacity: 0;
+        }
+
+        .members-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: #dde1ea;
+            font-size: 14px;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .members-sidebar-close {
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+            color: #333;
+            padding: 0 4px;
+        }
+
+        .members-sidebar-close:hover {
+            color: #000;
+        }
+
+        .members-list {
+            list-style: none;
+            margin: 0;
+            padding: 10px 12px;
+            overflow-y: auto;
+            font-size: 14px;
+            color: #222;
+        }
+
+        .members-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .members-list li:last-child {
+            border-bottom: none;
+        }
+
+        .members-you {
+            font-weight: bold;
+            color: #2e7d32;
+        }
+
+        .members-pending {
+            color: #6a1b9a;
+            font-style: italic;
+        }
+
+        .btn-members-toggle {
+            padding: 6px 12px;
+            background: #5865f2;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .btn-members-toggle:hover {
+            background: #4752c4;
         }
 
         .messages {
@@ -192,44 +287,93 @@
             <br>
             <a href="/logout" style="color:#f88;">Logout</a>
         </div>
-        <div class="chat">
-            <div class="topbar">
-                <div>User: {{ session["nickname"] }}</div>
-                <div>Channel: {{ current_channel or "None" }}</div>
-            </div>
-            <div class="messages">
-                {% for m in messages %}
-                <div
-                    class="msg-row{% if m.nickname == session['nickname'] %} msg-row--self{% else %} msg-row--other{% endif %}">
-                    <div
-                        class="msg-bubble{% if m.nickname == session['nickname'] %} msg-bubble--self{% else %} msg-bubble--other{% endif %}">
-                        <b>{{ m.nickname }}</b><br>
-                        {{ m.content }}<br>
-                        <time class="local-datetime time" datetime="{{ m.sent_at | datetime_iso }}">…</time>
-                        {% if m.nickname == session["nickname"] %}
-                        <br>
-                        <a href="/delete_message/{{ m.mid }}" style="color:#fcc;">delete</a>
-                        {% if m.can_recall %}
-                        <a href="/message/recall/{{ m.mid }}" style="color:#ffb84d;">recall</a>
-                        {% else %}
-                        <span style="color:#393939;">expired</span>
-                        {% endif %}
-                        {% endif %}
-                    </div>
+        <div class="chat-wrap">
+            <div class="chat">
+                <div class="topbar">
+                    <div>User: {{ session["nickname"] }}</div>
+                    <div>Channel: {{ current_channel or "None" }}</div>
+                    {% if channel_wid and channel_name %}
+                    <button type="button" class="btn-members-toggle" id="btn-members-toggle"
+                        aria-controls="members-sidebar" aria-expanded="true">Hide members</button>
+                    {% endif %}
                 </div>
-                {% endfor %}
+                <div class="messages">
+                    {% for m in messages %}
+                    <div
+                        class="msg-row{% if m.nickname == session['nickname'] %} msg-row--self{% else %} msg-row--other{% endif %}">
+                        <div
+                            class="msg-bubble{% if m.nickname == session['nickname'] %} msg-bubble--self{% else %} msg-bubble--other{% endif %}">
+                            <b>{{ m.nickname }}</b><br>
+                            {{ m.content }}<br>
+                            <time class="local-datetime time" datetime="{{ m.sent_at | datetime_iso }}">…</time>
+                            {% if m.nickname == session["nickname"] %}
+                            <br>
+                            <a href="/delete_message/{{ m.mid }}" style="color:#fcc;">delete</a>
+                            {% if m.can_recall %}
+                            <a href="/message/recall/{{ m.mid }}" style="color:#ffb84d;">recall</a>
+                            {% else %}
+                            <span style="color:#393939;">expired</span>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if channel_wid and channel_name %}
+                <form class="input-box" method="POST" action="/send_message">
+                    <input type="hidden" name="channel_wid" value="{{ channel_wid }}">
+                    <input type="hidden" name="channel_name" value="{{ channel_name }}">
+                    <input name="content" placeholder="Type message..." required>
+                    <button type="submit">Send</button>
+                </form>
+                {% endif %}
             </div>
             {% if channel_wid and channel_name %}
-            <form class="input-box" method="POST" action="/send_message">
-                <input type="hidden" name="channel_wid" value="{{ channel_wid }}">
-                <input type="hidden" name="channel_name" value="{{ channel_name }}">
-                <input name="content" placeholder="Type message..." required>
-                <button type="submit">Send</button>
-            </form>
+            <aside class="members-sidebar" id="members-sidebar" aria-label="Channel members">
+                <div class="members-sidebar-header">
+                    <span>Members ({{ channel_members|length }})</span>
+                    <button type="button" class="members-sidebar-close" id="members-sidebar-close"
+                        aria-label="Close members list" title="Close">&times;</button>
+                </div>
+                <ul class="members-list">
+                    {% for member in channel_members %}
+                    <li
+                        class="{% if member.is_pending %}members-pending{% elif member.uid == session['user_id'] %}members-you{% endif %}">
+                        {{ member.display }}{% if member.is_pending %} (pending){% elif member.uid == session['user_id']
+                        %} (you){% endif %}
+                    </li>
+                    {% else %}
+                    <li>No members or pending invites.</li>
+                    {% endfor %}
+                </ul>
+            </aside>
             {% endif %}
         </div>
     </div>
     <script src="{{ url_for('static', filename='local-time.js') }}"></script>
+    {% if channel_wid and channel_name %}
+    <script>
+        (function () {
+            var panel = document.getElementById("members-sidebar");
+            var btnToggle = document.getElementById("btn-members-toggle");
+            var btnClose = document.getElementById("members-sidebar-close");
+            if (!panel || !btnToggle) return;
+            function setCollapsed(collapsed) {
+                panel.classList.toggle("is-collapsed", collapsed);
+                btnToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+                btnToggle.textContent = collapsed ? "Show members" : "Hide members";
+            }
+            btnToggle.addEventListener("click", function () {
+                setCollapsed(!panel.classList.contains("is-collapsed"));
+            });
+            if (btnClose) {
+                btnClose.addEventListener("click", function () {
+                    setCollapsed(true);
+                });
+            }
+        })();
+    </script>
+    {% endif %}
 </body>
 
 </html>
