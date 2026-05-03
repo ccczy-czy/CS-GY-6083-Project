@@ -231,7 +231,7 @@
                     {% for row in workspace_invites %}
                     <tr>
                         <td>{{ row.workspace_name }}</td>
-                        <td>{{ row.invited_at }}</td>
+                        <td><time class="local-datetime" datetime="{{ row.invited_at | datetime_iso }}">…</time></td>
                         <td>
                             <form style="display:inline" method="POST"
                                 action="/invitations/workspace/{{ row.wmid }}/accept">
@@ -259,7 +259,7 @@
                     <tr>
                         <td>{{ row.channel_name }} (ws id {{ row.wid }})</td>
                         <td>{{ row.channel_type }}</td>
-                        <td>{{ row.invited_at }}</td>
+                        <td><time class="local-datetime" datetime="{{ row.invited_at | datetime_iso }}">…</time></td>
                         <td>
                             <form style="display:inline" method="POST"
                                 action="/invitations/channel/{{ row.cmid }}/accept">
@@ -280,6 +280,7 @@
             </div>
         </div>
     </div>
+    <script src="{{ url_for('static', filename='local-time.js') }}"></script>
 </body>
 
 </html>

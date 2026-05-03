@@ -13,6 +13,24 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "shubo_secret_key")
 
 
+@app.template_filter("datetime_iso")
+def datetime_iso_filter(value: object) -> str:
+    """
+    Serialize an instant for HTML time[datetime] so the client can format it
+    in the visitor's timezone. Naive datetimes are treated as UTC.
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, datetime):
+        return ""
+    dt = value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def _prepare_database_url(url: str) -> str:
     """Normalize Heroku/Railway style URLs and require SSL when running on Railway."""
     if url.startswith("postgres://"):
@@ -770,7 +788,6 @@ def chat():
         channel_wid=channel_wid,
         channel_name=channel_name,
         current_channel=current_channel,
-        now=datetime.now(timezone.utc),
     )
 
 

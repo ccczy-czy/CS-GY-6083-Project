@@ -205,7 +205,7 @@
                         class="msg-bubble{% if m.nickname == session['nickname'] %} msg-bubble--self{% else %} msg-bubble--other{% endif %}">
                         <b>{{ m.nickname }}</b><br>
                         {{ m.content }}<br>
-                        <span class="time">{{ m.sent_at.strftime("%Y-%m-%d %H:%M") }}</span>
+                        <time class="local-datetime time" datetime="{{ m.sent_at | datetime_iso }}">…</time>
                         {% if m.nickname == session["nickname"] %}
                         <br>
                         <a href="/delete_message/{{ m.mid }}" style="color:#fcc;">delete</a>
@@ -229,6 +229,7 @@
             {% endif %}
         </div>
     </div>
+    <script src="{{ url_for('static', filename='local-time.js') }}"></script>
 </body>
 
 </html>

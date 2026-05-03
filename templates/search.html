@@ -68,7 +68,8 @@
                 <strong>{{ r.sender_nickname }}</strong> in <em>#{{ r.channel_name }}</em> (workspace id {{
                 r.workspace_id }})<br>
                 <span style="color:#333;">{{ r.content }}</span><br>
-                <small style="color:#666;">{{ r.sent_at }}</small>
+                <small style="color:#666;"><time class="local-datetime"
+                        datetime="{{ r.sent_at | datetime_iso }}">…</time></small>
             </li>
             {% endfor %}
         </ul>
@@ -76,6 +77,7 @@
         <p style="color:#333;">No matches.</p>
         {% endif %}
     </div>
+    <script src="{{ url_for('static', filename='local-time.js') }}"></script>
 </body>
 
 </html>
