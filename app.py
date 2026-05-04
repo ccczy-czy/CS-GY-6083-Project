@@ -13,6 +13,25 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "shubo_secret_key")
 
 
+def _env_truthy(name: str) -> bool:
+    """Return True when the named env var is set to a common affirmative value."""
+    value = os.environ.get(name, "").strip().lower()
+    return value in ("1", "true", "yes", "on")
+
+
+# HTTPS sites (e.g. Railway public URL): send session cookie only over TLS and scope it for CSRF resistance.
+# Local HTTP dev: leave SECURE off unless SESSION_COOKIE_SECURE=1.
+_use_secure_session = _env_truthy("SESSION_COOKIE_SECURE") or bool(
+    os.environ.get("RAILWAY_ENVIRONMENT")
+)
+app.config["SESSION_COOKIE_SECURE"] = _use_secure_session
+
+_samesite_raw = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax").strip()
+if _samesite_raw not in ("Lax", "Strict", "None"):
+    _samesite_raw = "Lax"
+app.config["SESSION_COOKIE_SAMESITE"] = _samesite_raw
+
+
 @app.template_filter("datetime_iso")
 def datetime_iso_filter(value: object) -> str:
     """
