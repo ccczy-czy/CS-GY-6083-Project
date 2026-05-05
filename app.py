@@ -170,7 +170,7 @@ def _fetch_channel_members_sidebar(
     """Joined members plus users with a pending channel invite (not yet accepted)."""
     cursor.execute(
         """
-        SELECT u.uid, COALESCE(NULLIF(TRIM(u.nickname), ''), u.username) AS display,
+        SELECT cm.cmid, u.uid, COALESCE(NULLIF(TRIM(u.nickname), ''), u.username) AS display,
                (cm.joined_at IS NULL) AS is_pending
         FROM "ChannelMember" cm
         JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
@@ -184,7 +184,7 @@ def _fetch_channel_members_sidebar(
         """,
         (channel_wid, channel_name),
     )
-    return _dict_rows(("uid", "display", "is_pending"), cursor.fetchall())
+    return _dict_rows(("cmid", "uid", "display", "is_pending"), cursor.fetchall())
 
 
 def _email_format_ok(value: str) -> bool:
@@ -257,6 +257,18 @@ def can_manage_channel_invites(cursor, uid: int, channel_wid: int, channel_name:
         (channel_name, channel_wid, uid),
     )
     return cursor.fetchone() is not None
+
+
+def can_remove_channel_members(
+    cursor, uid: int, channel_wid: int, channel_name: str
+) -> bool:
+    """
+    Channel creator or workspace admin may remove people from a channel, but only if
+    they have already joined the channel themselves (not merely workspace membership).
+    """
+    if not user_joined_channel_for_chat(cursor, uid, channel_wid, channel_name):
+        return False
+    return can_manage_channel_invites(cursor, uid, channel_wid, channel_name)
 
 
 # ----- Routes -----
@@ -836,6 +848,11 @@ def chat():
         channel_members = _fetch_channel_members_sidebar(
             cur, channel_wid, channel_name
         )
+        can_remove_channel_members_flag = can_remove_channel_members(
+            cur, uid, channel_wid, channel_name
+        )
+    else:
+        can_remove_channel_members_flag = False
 
     cur.close()
     conn.close()
@@ -848,6 +865,7 @@ def chat():
         channel_name=channel_name,
         current_channel=current_channel,
         channel_members=channel_members,
+        can_remove_channel_members=can_remove_channel_members_flag,
     )
 
 
@@ -1265,6 +1283,70 @@ def decline_channel_invite(cmid):
     return redirect("/invitations")
 
 
+@app.route("/channel/member/<int:cmid>/remove", methods=["POST"])
+def remove_channel_member(cmid: int):
+    """
+    Remove a user or pending invite from a channel. Allowed for the channel creator
+    or a workspace admin, if the actor is an active member of the channel.
+    """
+    actor_uid = _require_user_id()
+    if actor_uid is None:
+        return redirect("/login")
+    form_wid = request.form.get("channel_wid", type=int)
+    raw_name = request.form.get("channel_name")
+    form_name = (raw_name or "").strip()
+    if form_name:
+        form_name = unquote(form_name)
+    if form_wid is None or not form_name:
+        return "Missing channel context", 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT cm.channel_wid, cm.channel_name, wm.uid AS member_uid
+        FROM "ChannelMember" cm
+        JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
+        WHERE cm.cmid = %s
+        """,
+        (cmid,),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return "Channel membership not found", 404
+    db_wid = int(row[0])
+    db_name = row[1]
+    target_uid = int(row[2])
+    if db_wid != form_wid or db_name != form_name:
+        cur.close()
+        conn.close()
+        return "Channel mismatch", 400
+
+    if not can_remove_channel_members(cur, actor_uid, db_wid, db_name):
+        cur.close()
+        conn.close()
+        return "Not allowed to remove members from this channel", 403
+
+    try:
+        cur.execute('DELETE FROM "ChannelMember" WHERE cmid = %s', (cmid,))
+        deleted = cur.rowcount
+        conn.commit()
+    except Exception:  # noqa: BLE001
+        conn.rollback()
+        deleted = 0
+    cur.close()
+    conn.close()
+    if deleted == 0:
+        return "Could not remove member", 400
+
+    if target_uid == actor_uid:
+        return redirect("/home")
+    qn = quote(db_name, safe="")
+    return redirect(f"/chat?channel_wid={db_wid}&channel_name={qn}")
+
+
 @app.route("/channel/join")
 def join_public_channel():
     """Join a public channel (query: channel_wid, channel_name)."""
@@ -1665,17 +1747,29 @@ def recall_message(mid):
     try:
         cur.execute(
             """
-            UPDATE "Message"
+            UPDATE "Message" m
             SET content = '[message was recalled]', is_recalled = TRUE
-            WHERE mid = %s
+            WHERE m.mid = %s
+              AND NOT m.is_recalled
+              AND m.sent_at > NOW() - INTERVAL '2 minutes'
+              AND EXISTS (
+                SELECT 1
+                FROM "ChannelMember" cm
+                JOIN "WorkspaceMember" wm ON cm.wmid = wm.wmid
+                WHERE m.cmid = cm.cmid AND wm.uid = %s
+              )
             """,
-            (mid,),
+            (mid, uid),
         )
+        updated = cur.rowcount
         conn.commit()
     except Exception:  # noqa: BLE001
         conn.rollback()
+        updated = 0
     cur.close()
     conn.close()
+    if updated == 0:
+        return "Recall window expired or message already recalled", 403
     return redirect(request.referrer or "/chat")
 
 

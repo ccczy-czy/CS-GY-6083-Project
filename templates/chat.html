@@ -135,6 +135,38 @@
             border-bottom: 1px solid #ddd;
         }
 
+        .members-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .members-list-name {
+            flex: 1;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .member-remove-form {
+            margin: 0;
+            flex-shrink: 0;
+        }
+
+        .btn-member-remove {
+            padding: 2px 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            border: 1px solid #c62828;
+            background: #fff;
+            color: #c62828;
+            cursor: pointer;
+        }
+
+        .btn-member-remove:hover {
+            background: #ffebee;
+        }
+
         .members-list li:last-child {
             border-bottom: none;
         }
@@ -310,9 +342,10 @@
                             <br>
                             <a href="/delete_message/{{ m.mid }}" style="color:#fcc;">delete</a>
                             {% if m.can_recall %}
-                            <a href="/message/recall/{{ m.mid }}" style="color:#ffb84d;">recall</a>
+                            <a href="/message/recall/{{ m.mid }}" class="msg-recall-link" style="color:#ffb84d;"
+                                data-sent-at="{{ m.sent_at | datetime_iso }}">recall</a>
                             {% else %}
-                            <span style="color:#393939;">expired</span>
+                            <span class="msg-recall-expired" style="color:#393939;">expired</span>
                             {% endif %}
                             {% endif %}
                         </div>
@@ -338,9 +371,23 @@
                 <ul class="members-list">
                     {% for member in channel_members %}
                     <li
-                        class="{% if member.is_pending %}members-pending{% elif member.uid == session['user_id'] %}members-you{% endif %}">
-                        {{ member.display }}{% if member.is_pending %} (pending){% elif member.uid == session['user_id']
-                        %} (you){% endif %}
+                        class="members-list-item {% if member.is_pending %}members-pending{% elif member.uid == session['user_id'] %}members-you{% endif %}">
+                        <span class="members-list-name">{{ member.display }}{% if member.is_pending %} (pending){% elif
+                            member.uid == session['user_id'] %} (you){% endif %}</span>
+                        {% if can_remove_channel_members %}
+                        <form method="POST" action="{{ url_for('remove_channel_member', cmid=member.cmid) }}"
+                            class="member-remove-form">
+                            <input type="hidden" name="channel_wid" value="{{ channel_wid }}">
+                            <input type="hidden" name="channel_name" value="{{ channel_name }}">
+                            {% if member.is_pending %}
+                            <button type="submit" class="btn-member-remove"
+                                onclick="return confirm('Cancel this invitation?');">Cancel</button>
+                            {% else %}
+                            <button type="submit" class="btn-member-remove"
+                                onclick="return confirm('Remove this member from the channel?');">Remove</button>
+                            {% endif %}
+                        </form>
+                        {% endif %}
                     </li>
                     {% else %}
                     <li>No members or pending invites.</li>
@@ -351,6 +398,42 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='local-time.js') }}"></script>
+    <script>
+        (function () {
+            var RECALL_MS = 2 * 60 * 1000;
+            function expireRecallAnchor(anchor) {
+                var span = document.createElement("span");
+                span.className = "msg-recall-expired";
+                span.style.color = "#393939";
+                span.textContent = "expired";
+                if (anchor.parentNode) {
+                    anchor.parentNode.replaceChild(span, anchor);
+                }
+            }
+            function scheduleRecallExpiry(anchor) {
+                var iso = anchor.getAttribute("data-sent-at");
+                if (!iso) {
+                    return;
+                }
+                var sentMs = Date.parse(iso);
+                if (Number.isNaN(sentMs)) {
+                    return;
+                }
+                var remaining = RECALL_MS - (Date.now() - sentMs);
+                if (remaining <= 0) {
+                    expireRecallAnchor(anchor);
+                    return;
+                }
+                window.setTimeout(function () {
+                    expireRecallAnchor(anchor);
+                }, remaining);
+            }
+            var recallLinks = document.querySelectorAll("a.msg-recall-link[data-sent-at]");
+            for (var i = 0; i < recallLinks.length; i++) {
+                scheduleRecallExpiry(recallLinks[i]);
+            }
+        })();
+    </script>
     {% if channel_wid and channel_name %}
     <script>
         (function () {
