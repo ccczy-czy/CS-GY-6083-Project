@@ -14,6 +14,11 @@ Key capabilities include:
 - **Channels** — public (open to all workspace members), private (invite-only with explicit acceptance), and direct (1-to-1 between two workspace members).
 - **Messaging** — chat system within joined channels, message recall (permanently hidden for all users within 2 minutes of sending), sender-only message deletion (hides the message only for the sender), and cross-channel search.
 
+The complete system code can be found at this GitHub repo: https://github.com/ccczy-czy/CS-GY-6083-Project
+
+Authors: Shubo Wang, Zander Chen
+NetIDs: sw7165, zc2122
+
 ---
 
 ## 2. System Design
