@@ -65,13 +65,57 @@
         .members-table button.btn-remove {
             background: #c0392b;
         }
+
+        .description-edit {
+            text-align: left;
+            margin: 16px 0;
+        }
+
+        .description-edit label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        .description-edit textarea {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        .description-edit button {
+            margin-top: 8px;
+            padding: 8px 14px;
+            background: #00c6ff;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
     </style>
 </head>
 
 <body>
     <div class="card">
         <h1>{{ workspace.name }}</h1>
+        {% if can_edit_workspace_description %}
+        <div class="description-edit">
+            <form method="POST" action="{{ url_for('workspace_update_description', workspace_id=workspace.wid) }}">
+                <label for="workspace-description">Description</label>
+                <textarea id="workspace-description" name="description"
+                    maxlength="10000">{{ workspace.description or "" }}</textarea>
+                <button type="submit">Save description</button>
+            </form>
+        </div>
+        {% else %}
         <p>{{ workspace.description }}</p>
+        {% endif %}
         <hr>
         <h2>Channels</h2>
         <p><a href="/channel/create/{{ workspace.wid }}">+ Create channel</a></p>

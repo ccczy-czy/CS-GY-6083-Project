@@ -100,6 +100,11 @@ def is_workspace_creator(cursor, uid: int, wid: int) -> bool:
     return cursor.fetchone() is not None
 
 
+def can_edit_workspace_description(cursor, uid: int, wid: int) -> bool:
+    """True if uid may change Workspace.description (creator or workspace admin)."""
+    return is_workspace_creator(cursor, uid, wid) or is_workspace_admin(cursor, uid, wid)
+
+
 def get_wmid_for_user_in_workspace(cursor, uid: int, wid: int):
     cursor.execute(
         """
@@ -978,6 +983,7 @@ def workspace_detail(workspace_id):
             cur.fetchall(),
         )
     viewer_is_workspace_creator = is_workspace_creator(cur, uid, workspace_id)
+    can_edit_description = can_edit_workspace_description(cur, uid, workspace_id)
     for ch in chlist:
         ch["can_invite_to_channel"] = can_manage_channel_invites(
             cur, uid, workspace_id, str(ch["name"])
@@ -991,7 +997,53 @@ def workspace_detail(workspace_id):
         can_invite_to_workspace=is_workspace_admin_user,
         members=members,
         viewer_is_workspace_creator=viewer_is_workspace_creator,
+        can_edit_workspace_description=can_edit_description,
     )
+
+
+@app.route("/workspace/<int:workspace_id>/description", methods=["POST"])
+def workspace_update_description(workspace_id: int):
+    """Update workspace description; allowed for creator or workspace admin."""
+    if "user_id" not in session:
+        return redirect("/login")
+    uid = int(session["user_id"])
+    if "description" not in request.form:
+        return "Missing description field.", 400
+    raw_description = request.form.get("description") or ""
+    description = raw_description.strip()
+    max_description_len = 10000
+    if len(description) > max_description_len:
+        return "Description is too long.", 400
+    conn = get_db()
+    cur = conn.cursor()
+    if not user_is_workspace_member(cur, uid, workspace_id):
+        cur.close()
+        conn.close()
+        return "You are not a member of this workspace.", 403
+    if not can_edit_workspace_description(cur, uid, workspace_id):
+        cur.close()
+        conn.close()
+        return (
+            "Only the workspace creator or an administrator can update the description.",
+            403,
+        )
+    cur.execute(
+        """
+        UPDATE "Workspace"
+        SET description = %s
+        WHERE wid = %s
+        """,
+        (description, workspace_id),
+    )
+    if cur.rowcount != 1:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return "Workspace not found.", 404
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for("workspace_detail", workspace_id=workspace_id))
 
 
 @app.route(
@@ -1814,25 +1866,30 @@ def search_messages():
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT DISTINCT ON (m.mid) m.content, m.sent_at, ch.name, ch.wid, send.nickname,
-               m.channel_name, m.channel_wid
-        FROM "Message" m
-        JOIN "Channel" ch ON ch.name = m.channel_name AND ch.wid = m.channel_wid
-        JOIN "ChannelMember" cm_send ON m.cmid = cm_send.cmid
-        JOIN "WorkspaceMember" wm_send ON cm_send.wmid = wm_send.wmid
-        JOIN "User" send ON send.uid = wm_send.uid
-        JOIN "ChannelMember" cm_v
-          ON cm_v.channel_wid = m.channel_wid AND cm_v.channel_name = m.channel_name
-        JOIN "WorkspaceMember" wm_v ON cm_v.wmid = wm_v.wmid
-        WHERE wm_v.uid = %s
-          AND cm_v.joined_at IS NOT NULL
-          AND NOT m.is_deleted
-          AND NOT EXISTS (
-            SELECT 1 FROM "MessageHidden" mh
-            WHERE mh.mid = m.mid AND mh.uid = %s
-          )
-          AND m.content ILIKE %s
-        ORDER BY m.mid, m.sent_at DESC
+        SELECT inner_match.content, inner_match.sent_at, inner_match.channel_name,
+               inner_match.workspace_id, inner_match.sender_nickname
+        FROM (
+            SELECT DISTINCT ON (m.mid) m.content, m.sent_at, ch.name AS channel_name,
+                   ch.wid AS workspace_id, send.nickname AS sender_nickname
+            FROM "Message" m
+            JOIN "Channel" ch ON ch.name = m.channel_name AND ch.wid = m.channel_wid
+            JOIN "ChannelMember" cm_send ON m.cmid = cm_send.cmid
+            JOIN "WorkspaceMember" wm_send ON cm_send.wmid = wm_send.wmid
+            JOIN "User" send ON send.uid = wm_send.uid
+            JOIN "ChannelMember" cm_v
+              ON cm_v.channel_wid = m.channel_wid AND cm_v.channel_name = m.channel_name
+            JOIN "WorkspaceMember" wm_v ON cm_v.wmid = wm_v.wmid
+            WHERE wm_v.uid = %s
+              AND cm_v.joined_at IS NOT NULL
+              AND NOT m.is_deleted
+              AND NOT EXISTS (
+                SELECT 1 FROM "MessageHidden" mh
+                WHERE mh.mid = m.mid AND mh.uid = %s
+              )
+              AND m.content ILIKE %s
+            ORDER BY m.mid, m.sent_at DESC
+        ) AS inner_match
+        ORDER BY inner_match.sent_at DESC
         """,
         (uid, uid, pattern),
     )
