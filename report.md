@@ -271,7 +271,7 @@ Visit the live application at:
 
 > **`https://cs-gy-6083-project-production.up.railway.app`**
 
-No installation is required. You can register a new account immediately and begin using the system. All data is persisted in the cloud-hosted PostgreSQL database.
+No installation is required. You can register a new account immediately and begin using the system. All data is persisted in the cloud-hosted PostgreSQL database. The deployed instance will remain accessible within 10 days from May 8th, 2026. After that, we will be taking down the deployment to prevent further incurred charges. If you need to visit the live site after May 18th, 2026, please send us an email at zc2122@nyu.edu and we can open short preview window for you.
 
 ---
 
