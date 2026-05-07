@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 import psycopg2
 from flask import Flask, render_template, request, redirect, session, url_for
+from flask.wrappers import Response
 from psycopg2 import errors
 
 app = Flask(__name__)
@@ -30,6 +31,54 @@ _samesite_raw = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax").strip()
 if _samesite_raw not in ("Lax", "Strict", "None"):
     _samesite_raw = "Lax"
 app.config["SESSION_COOKIE_SAMESITE"] = _samesite_raw
+
+
+def _content_security_policy() -> str:
+    """
+    Build a Content-Security-Policy suitable for this app's templates.
+
+    - Inline <style> and <script> blocks (and inline event handlers like onclick)
+      are allowed because the HTML templates depend on them.
+    - Background images loaded from CSS url(...) are allow-listed (img-src).
+    - The PostgreSQL database is used only on the server (psycopg2); CSP is a
+      browser header and does not affect DB connectivity on Railway or elsewhere.
+
+    Optional: set CSP_EXTRA_IMG_SRC to a space-separated list of extra img-src
+    tokens (e.g. "https://cdn.example.com https://img.example.org") if you add
+    more external images in CSS.
+    """
+    extra_img_raw = os.environ.get("CSP_EXTRA_IMG_SRC", "").strip()
+    extra_img_tokens: list[str] = []
+    if extra_img_raw:
+        extra_img_tokens = [t for t in extra_img_raw.split() if t]
+
+    img_sources = [
+        "'self'",
+        "https://*.ftcdn.net",
+        "https://images.unsplash.com",
+        *extra_img_tokens,
+    ]
+    directives: list[str] = [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        f"img-src {' '.join(img_sources)}",
+        "style-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'unsafe-inline'",
+        "font-src 'self'",
+        "connect-src 'self'",
+    ]
+    return "; ".join(directives)
+
+
+@app.after_request
+def _apply_security_headers(response: Response) -> Response:
+    """Attach defense-in-depth headers without altering response bodies."""
+    if response.mimetype and response.mimetype.startswith("text/html"):
+        response.headers["Content-Security-Policy"] = _content_security_policy()
+    return response
 
 
 @app.template_filter("datetime_iso")
